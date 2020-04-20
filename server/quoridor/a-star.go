@@ -49,6 +49,7 @@ func (pq *PriorityQueue) Pop() interface{} {
 	old := *pq
 	n := len(old)
 	item := old[n-1]
+	old[n-1] = nil // avoid memory leak
 	*pq = old[0 : n-1]
 	return item
 }
@@ -79,6 +80,7 @@ func (game *Game) FindPath(start, goal Position) []Position {
 	}
 	return nil
 }
+
 func reachedGoal(current Position, goal Position) bool {
 	return current.Y == goal.Y || current.X == goal.X
 }

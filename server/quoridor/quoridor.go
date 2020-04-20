@@ -54,6 +54,11 @@ type (
 		Owner    PlayerPosition
 		Type     TypeId
 	}
+
+	Move struct {
+		Player PlayerPosition
+		Delta  []Position
+	}
 )
 
 // An enumeration of all possible player positions.
@@ -97,6 +102,110 @@ var (
 		{Y: -1},
 	}
 )
+
+// Initialize with default values, and supplied game Id and Name.
+//
+// The game is initialized with an empty board and player slice. Defaults current turn to PlayerOne and winner to
+// -1. Everything else defaults to their zero value.
+func NewGame(id uuid.UUID, name string) (*Game, error) {
+	if id == uuid.Nil {
+		return nil, errors.New("unable to create game, need valid id")
+	}
+	if name == "" {
+		return nil, errors.New("unable to create game, need non-empty name")
+	}
+	return &Game{
+		Board:       make(map[Position]Piece),
+		Players:     make(map[PlayerPosition]*Player),
+		CurrentTurn: PlayerOne,
+		Id:          id,
+		Name:        name,
+		Winner:      -1,
+	}, nil
+}
+
+// Adds a new player to the player map at the next possible player position. Will also update the barrier count when
+// the player count goes from two to three.
+// Players can only be added if the game has not yet started, and they don't already exist in the game.
+func (game *Game) AddPlayer(id uuid.UUID, name string) (PlayerPosition, error) {
+	if !game.StartDate.IsZero() {
+		return -1, errors.New(fmt.Sprintf("cannot add player %s, game has already started", name))
+	}
+	// Make sure the player isn't already a part of this game. The same player cannot play against themselves.
+	for _, player := range game.Players {
+		if player.PlayerId == id {
+			return 0, errors.New(fmt.Sprintf("player with id %s alreayd in this game", id.String()))
+		}
+	}
+	barriersForPlayer := 10
+	if len(game.Players) >= 2 {
+		barriersForPlayer = 5
+	}
+	// For each possible player
+	for playerNumber := PlayerOne; playerNumber <= PlayerFour; playerNumber++ {
+		p, present := game.Players[playerNumber]
+		if present {
+			// Make sure they have the correct number of barriers
+			p.Barriers = barriersForPlayer
+			game.Players[playerNumber] = p
+		} else {
+			playerPawn := Piece{
+				Position: startingPositions[playerNumber],
+				Owner:    playerNumber,
+				Type:     Pawn,
+			}
+			// Create a new player with barrier count, starting position, etc.
+			game.Players[playerNumber] = &Player{
+				Barriers:   barriersForPlayer,
+				PlayerId:   id,
+				PlayerName: name,
+				Pawn:       playerPawn,
+			}
+			// Add pawn to board
+			game.Board[playerPawn.Position] = playerPawn
+			return playerNumber, nil
+		}
+	}
+	return -1, errors.New("no open player positions in this game")
+}
+
+// Starts a game by setting the StartDate to the current instant of time. Returns an error if there aren't enough
+// players, or the game has already started.
+func (game *Game) StartGame() error {
+	if !(len(game.Players) == 2 || len(game.Players) == 4) {
+		return errors.New(fmt.Sprintf("can't start game, wrong number of players (%d)", len(game.Players)))
+	}
+	if !game.StartDate.IsZero() {
+		return errors.New(fmt.Sprintf("game already started"))
+	}
+	game.StartDate = time.Now()
+	return nil
+}
+
+// Moves a pawn to the given new position for the give player. Returns an error if the move is invalid.
+//
+// The move is invalid if it's an invalid pawn location, the wrong player's turn, or the game is over.
+func (game *Game) MovePawn(newPosition Position, player PlayerPosition) error {
+	pawn := &game.Players[player].Pawn
+	if !isValidPawnLocation(newPosition) {
+		return errors.New("invalid Pawn Location")
+	}
+	if game.CurrentTurn != player {
+		return errors.New(fmt.Sprintf("wrong turn, current turn is for Player: %d", game.CurrentTurn))
+	}
+	if moveError := isValidPawnMove(newPosition, pawn.Position, game.Board); moveError != nil {
+		return moveError
+	}
+	if game.IsOver() {
+		return errors.New("invalid move, game is already over")
+	}
+	delete(game.Board, pawn.Position)
+	pawn.Position = newPosition
+	game.Board[pawn.Position] = *pawn
+	checkGameOver(game)
+	game.nextTurn()
+	return nil
+}
 
 // GetValidMoveByDirection returns all possible valid positions a pawn can land in a given direction.
 // Returns nil if there is a barrier present. If there is a pawn present on the destination square, check to see if
@@ -171,57 +280,123 @@ func isOnBoard(position Position) bool {
 	return !(position.Y < 0 || position.Y >= BoardSize || position.X < 0 || position.X >= BoardSize)
 }
 
-// Adds a new player to the player map at the next possible player position. Will also update the barrier count when
-// the player count goes from 2 to three.
-func (game *Game) AddPlayer(id uuid.UUID, name string) (PlayerPosition, error) {
-	if !game.StartDate.IsZero() {
-		return -1, errors.New(fmt.Sprintf("cannot add player %s, game has already started", name))
+// Places a barrier on the board at the specified position, for the specified player. Returns an error if the barrier
+// cannot be placed.
+//
+// This function will advance the player's turn and decrement the player's barrier count.
+func (game *Game) PlaceBarrier(position Position, player PlayerPosition) error {
+	if game.CurrentTurn != player {
+		return errors.New(fmt.Sprintf("wrong turn, current turn is for Player: %d", game.CurrentTurn))
 	}
-	// Make sure the player isn't already a part of this game. The same player cannot play against themselves.
-	for _, player := range game.Players {
-		if player.PlayerId == id {
-			return 0, errors.New(fmt.Sprintf("player with id %s alreayd in this game", id.String()))
+	if invalidPosition(position) {
+		return errors.New("invalid location for a barrier")
+	}
+	if playerHasNoMoreBarriers(game.Players[player]) {
+		return errors.New("the player has no more barriers to play")
+	}
+	barrierPositions := createBarrierPositions(position)
+	if barriersAreInTheWay(barrierPositions, game.Board) {
+		return errors.New("the new barrier intersects with another")
+	}
+	if barrierPreventsWin(barrierPositions, game) {
+		return errors.New("the barrier prevents a players victory")
+	}
+	if game.IsOver() {
+		return errors.New("invalid move, game is already over")
+	}
+	game.Players[player].Barriers--
+	for _, pos := range barrierPositions {
+		game.Board[pos] = Piece{Position: pos, Owner: player, Type: Barrier}
+	}
+	game.nextTurn()
+	return nil
+}
+
+// You can never place a pawn or barrier at a double-odd position (the intersections of the gutters), or on the very
+// last row and column of the board.
+func invalidPosition(position Position) bool {
+	return position.Y&0x1 == position.X&0x1 || // both col and row are even or odd
+		// can't be on the last valid row/
+		!(position.Y < BoardSize-1 &&
+			(position.X < BoardSize-1))
+}
+
+func playerHasNoMoreBarriers(player *Player) bool {
+	return player.Barriers <= 0
+}
+
+// Check if a placed barrier will block a player's path to the goal. Uses a simple A-* algorithm.
+func barrierPreventsWin(positions [3]Position, game *Game) bool {
+	for _, position := range positions {
+		game.Board[position] = Piece{Position: position, Owner: PlayerOne}
+	}
+	//remove those temporary barriers no matter what
+	defer func() {
+		for _, position := range positions {
+			delete(game.Board, position)
+		}
+	}()
+
+	for playerPosition, player := range game.Players {
+		path := game.FindPath(player.Pawn.Position, winningPositions[playerPosition])
+		if path == nil {
+			return true
 		}
 	}
-	barriersForPlayer := 10
-	if len(game.Players) >= 2 {
-		barriersForPlayer = 5
+	return false
+}
+
+func createBarrierPositions(position Position) [3]Position {
+	var positions [3]Position
+	if isABarrierRow(position) {
+		positions = buildHorizontalBarriers(position)
+	} else if isABarrierColumn(position) {
+		positions = buildVerticalBarriers(position)
 	}
-	// For each possible player
-	for playerNumber := PlayerOne; playerNumber <= PlayerFour; playerNumber++ {
-		p, present := game.Players[playerNumber]
-		if present {
-			// Make sure they have the correct number of barriers
-			p.Barriers = barriersForPlayer
-			game.Players[playerNumber] = p
-		} else {
-			playerPawn := Piece{
-				Position: startingPositions[playerNumber],
-				Owner:    playerNumber,
-				Type:     Pawn,
-			}
-			// Create a new player with barrier count, starting position, etc.
-			game.Players[playerNumber] = &Player{
-				Barriers:   barriersForPlayer,
-				PlayerId:   id,
-				PlayerName: name,
-				Pawn:       playerPawn,
-			}
-			// Add pawn to board
-			game.Board[playerPawn.Position] = playerPawn
-			return playerNumber, nil
+	return positions
+}
+
+// Checks if any new positions already on the board, i.e. the new barrier will intersect a current one.
+func barriersAreInTheWay(positions [3]Position, board Board) bool {
+	for _, pos := range positions {
+		if _, ok := board[pos]; ok {
+			return true
 		}
 	}
-	return -1, errors.New("no open player positions in this game")
+	return false
+}
+
+func buildVerticalBarriers(position Position) [3]Position {
+	return [3]Position{
+		{position.X, position.Y + 0},
+		{position.X, position.Y + 1},
+		{position.X, position.Y + 2},
+	}
+}
+func buildHorizontalBarriers(position Position) [3]Position {
+	return [3]Position{
+		{position.X + 0, position.Y},
+		{position.X + 1, position.Y},
+		{position.X + 2, position.Y},
+	}
+}
+
+func isABarrierColumn(position Position) bool {
+	return position.X&0x1 == 1 && position.Y&0x1 == 0
+}
+
+func isABarrierRow(position Position) bool {
+	return position.Y&0x1 == 1 && position.X&0x1 == 0
 }
 
 // Advances the turn to the next player.
-func (game *Game) NextTurn() {
+func (game *Game) nextTurn() {
 	next := int(game.CurrentTurn+1) % len(game.Players)
 	game.CurrentTurn = PlayerPosition(next)
 }
 
-func (game *Game) IsGameOver() bool {
+// Checks if the game is over by checking if the EndDate is set.
+func (game *Game) IsOver() bool {
 	return !game.EndDate.IsZero()
 }
 
@@ -265,58 +440,7 @@ func (game *Game) Copy() Game {
 	return newGame
 }
 
-// Starts a game by setting the StartDate to the current instant of time. Returns an error if there aren't enough
-// players, or the game has already started.
-func (game *Game) StartGame() error {
-	if !(len(game.Players) == 2 || len(game.Players) == 4) {
-		return errors.New(fmt.Sprintf("can't start game, wrong number of players (%d)", len(game.Players)))
-	}
-	if !game.StartDate.IsZero() {
-		return errors.New(fmt.Sprintf("game already started"))
-	}
-	game.StartDate = time.Now()
-	return nil
-}
-
-// Initialize with default values
-func NewGame(id uuid.UUID, name string) (*Game, error) {
-	if id == uuid.Nil {
-		return nil, errors.New("unable to create game, need valid id")
-	}
-	if name == "" {
-		return nil, errors.New("unable to create game, need non-empty name")
-	}
-	return &Game{
-		Board:       make(map[Position]Piece),
-		Players:     make(map[PlayerPosition]*Player),
-		CurrentTurn: PlayerOne,
-		Id:          id,
-		Name:        name,
-		Winner:      -1,
-	}, nil
-}
-
-// Return the state of the Board after the move, of the current board if an error
-func (game *Game) MovePawn(newPosition Position, player PlayerPosition) error {
-	pawn := &game.Players[player].Pawn
-	if !IsValidPawnLocation(newPosition) {
-		return errors.New("invalid Pawn Location")
-	}
-	if game.CurrentTurn != player {
-		return errors.New(fmt.Sprintf("wrong turn, current turn is for Player: %d", game.CurrentTurn))
-	}
-	if moveError := isValidPawnMove(newPosition, pawn.Position, game.Board); moveError != nil {
-		return moveError
-	}
-	delete(game.Board, pawn.Position)
-	pawn.Position = newPosition
-	game.Board[pawn.Position] = *pawn
-	checkGameOver(game)
-	game.NextTurn()
-	return nil
-}
-
-func IsValidPawnLocation(position Position) bool {
+func isValidPawnLocation(position Position) bool {
 	return position.X%2 == 0 && position.Y%2 == 0
 }
 
@@ -327,7 +451,7 @@ func isValidPawnMove(new Position, current Position, board Board) error {
 			return nil
 		}
 	}
-	return errors.New("the pawn cannot reach that square")
+	return errors.New("the Pawn cannot reach that square")
 }
 
 func checkGameOver(game *Game) {
@@ -337,108 +461,11 @@ func checkGameOver(game *Game) {
 	}
 }
 
+// Returns a slice of all valid pawn moves from a given position.
 func (board Board) GetValidPawnMoves(pawnPosition Position) []Position {
 	validPositions := make([]Position, 0, 6)
 	for _, d := range directions {
 		validPositions = append(validPositions, board.getValidMoveByDirection(pawnPosition, d)...)
 	}
 	return validPositions
-}
-
-func (game *Game) PlaceBarrier(position Position, player PlayerPosition) (Board, error) {
-	if game.CurrentTurn != player {
-		return game.Board, errors.New(fmt.Sprintf("wrong turn, current turn is for Player: %d", game.CurrentTurn))
-	}
-	if invalidPosition(position) {
-		return game.Board, errors.New("invalid location for a barrier")
-	}
-	if playerHasNoMoreBarriers(game.Players[player]) {
-		return game.Board, errors.New("the player has no more barriers to play")
-	}
-	barrierPositions := createBarrierPositions(position)
-	if barriersAreInTheWay(barrierPositions, game.Board) {
-		return game.Board, errors.New("the new barrier intersects with another")
-	}
-	if barrierPreventsWin(barrierPositions, game) {
-		return game.Board, errors.New("the barrier prevents a players victory")
-	}
-	game.Players[player].Barriers--
-	for _, pos := range barrierPositions {
-		game.Board[pos] = Piece{Position: position, Owner: player}
-	}
-	game.NextTurn()
-	return game.Board, nil
-}
-
-func invalidPosition(position Position) bool {
-	return position.Y&0x1 == position.X&0x1 || // both col and row are even or odd
-		// can't be on the last valid row/
-		!(position.Y < BoardSize-1 &&
-			(position.X < BoardSize-1))
-}
-
-func playerHasNoMoreBarriers(player *Player) bool {
-	return player.Barriers <= 0
-}
-
-func barrierPreventsWin(positions [3]Position, game *Game) bool {
-	for _, position := range positions {
-		game.Board[position] = Piece{Position: position, Owner: PlayerOne}
-	}
-	//remove those temporary barriers no matter what
-	defer func() {
-		for _, position := range positions {
-			delete(game.Board, position)
-		}
-	}()
-
-	for playerPosition, player := range game.Players {
-		path := game.FindPath(player.Pawn.Position, winningPositions[playerPosition])
-		if path == nil {
-			return true
-		}
-	}
-	return false
-}
-
-func createBarrierPositions(position Position) [3]Position {
-	var positions [3]Position
-	if isABarrierRow(position) {
-		positions = buildHorizontalBarriers(position)
-	} else if isABarrierColumn(position) {
-		positions = buildVerticalBarriers(position)
-	}
-	return positions
-}
-
-func barriersAreInTheWay(positions [3]Position, board Board) bool {
-	for _, pos := range positions {
-		if _, ok := board[pos]; ok {
-			return true
-		}
-	}
-	return false
-}
-
-func buildVerticalBarriers(position Position) [3]Position {
-	return [3]Position{
-		{position.Y + 0, position.X},
-		{position.Y + 1, position.X},
-		{position.Y + 2, position.X},
-	}
-}
-func buildHorizontalBarriers(position Position) [3]Position {
-	return [3]Position{
-		{position.Y, position.X + 0},
-		{position.Y, position.X + 1},
-		{position.Y, position.X + 2},
-	}
-}
-
-func isABarrierColumn(position Position) bool {
-	return position.X&0x1 == 1 && position.Y&0x1 == 0
-}
-
-func isABarrierRow(position Position) bool {
-	return position.Y&0x1 == 1 && position.X&0x1 == 0
 }

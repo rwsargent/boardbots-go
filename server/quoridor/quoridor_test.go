@@ -108,39 +108,35 @@ func Test_AddPlayer(t *testing.T) {
 	assert.Error(t, err, fmt.Sprintf("cannot add player %s, game has already started", TestIds[6].String()))
 }
 
-func NewFourPlayerGame() *Game {
+func NewGameWithPlayers(players int) *Game {
 	game, _ := NewGame(TestIds[0], "Four Player Game")
-	for i := 0; i < 4; i++ {
+	for i := 0; i < players; i++ {
 		_, _ = game.AddPlayer(TestIds[i+1], fmt.Sprint("Player ", i))
 	}
 	return game
 }
-
 func Test_AllPlayersMoveForward(t *testing.T) {
-	game := NewFourPlayerGame()
+	game := NewGameWithPlayers(4)
 	var testCases = []struct {
 		position Position
 		player   PlayerPosition
 	}{
 		{Position{X: 8, Y: 14}, PlayerOne},
 		{Position{X: 8, Y: 2}, PlayerTwo},
-		{Position{X: 14, Y: 8}, PlayerThree},
-		{Position{X: 2, Y: 8}, PlayerFour},
+		{Position{X: 2, Y: 8}, PlayerThree},
+		{Position{X: 14, Y: 8}, PlayerFour},
 
 		{Position{X: 8, Y: 12}, PlayerOne},
 		{Position{X: 8, Y: 4}, PlayerTwo},
-		{Position{X: 12, Y: 8}, PlayerThree},
-		{Position{X: 4, Y: 8}, PlayerFour},
+		{Position{X: 4, Y: 8}, PlayerThree},
+		{Position{X: 12, Y: 8}, PlayerFour},
 
 		{Position{X: 8, Y: 10}, PlayerOne},
 		{Position{X: 8, Y: 6}, PlayerTwo},
-		{Position{X: 10, Y: 8}, PlayerThree},
-		{Position{X: 6, Y: 8}, PlayerFour},
+		{Position{X: 6, Y: 8}, PlayerThree},
+		{Position{X: 10, Y: 8}, PlayerFour},
 
 		{Position{X: 8, Y: 8}, PlayerOne},
-		{Position{X: 8, Y: 6}, PlayerTwo},
-		{Position{X: 8, Y: 8}, PlayerThree},
-		{Position{X: 6, Y: 8}, PlayerFour},
 	}
 
 	for idx, tc := range testCases {
@@ -158,301 +154,253 @@ func Test_AllPlayersMoveForward(t *testing.T) {
 		assert.Equal(t, game.Players[tc.player].Pawn, pawn, move)
 		assert.Len(t, game.Board, 4, move) // No new pieces are ever added
 	}
+
+	err := game.MovePawn(Position{X: 8, Y: 8}, PlayerTwo)
+	assert.EqualError(t, err, "the Pawn cannot reach that square")
+	assert.Equal(t, PlayerTwo, game.CurrentTurn)
+
+	// Test jump
+	err = game.MovePawn(Position{X: 8, Y: 10}, PlayerTwo)
+	assert.NoError(t, err)
+	assert.Equal(t, PlayerThree, game.CurrentTurn)
 }
 
-//func Test_FirstMoveIsValid(t *testing.T) {
-//	game := NewGame(TestUUID, "")
-//	board, err := game.MovePawn(Position{2, 8}, PlayerOne)
-//	assert.Nil(t, err, "Valid Move")
-//	assert.Len(t, board, 2, "Game has two pawns")
-//
-//	assert.Equal(t, game.Players[PlayerOne].Pawn.Position, Position{2, 8})
-//}
-//
-//func Test_FirstMoveIsAnInvalidMove(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	_, err := game.MovePawn(Position{4, 4}, PlayerOne)
-//	assert.EqualError(t, err, "the pawn cannot reach that square")
-//}
-//
-//func Test_PlaceBarrier(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	placePosition := Position{1, 6}
-//	board, err := game.PlaceBarrier(placePosition, PlayerOne)
-//	assert.NotNil(t, board[placePosition])
-//	assert.NotNil(t, board[Position{1, 7}])
-//	assert.NotNil(t, board[Position{1, 8}])
-//	_, present := board[Position{1, 9}]
-//	assert.False(t, present)
-//	assert.Nil(t, err, "Valid placement")
-//}
-//
-//func Test_PlaceBarrierWithNoMoreBarriers(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	for i := 0; i < 18; i++ {
-//		Y := 14 - (4 * (i / 8)) // offset after a Y as filled up
-//		X := 1 + (2 * (i % 8))  // wrap around to the same X, since Y changes.
-//		position := Position{Y: Y, X: X}
-//		board, err := game.PlaceBarrier(position, PlayerPosition(i%2))
-//		assert.Nil(t, err, "No error expected")
-//		assert.NotNil(t, board[position], "board should be placed")
-//		assert.NotNil(t, game.Board[position], "board should be placed")
-//	}
-//	game.PlaceBarrier(Position{Y: 0, X: 3}, PlayerOne)
-//	board, err := game.PlaceBarrier(Position{Y: 0, X: 1}, PlayerTwo)
-//	assert.Nil(t, err, "No error expected")
-//	assert.NotNil(t, board[Position{Y: 0, X: 1}], "board should be placed")
-//
-//	illegalPosition := Position{Y: 0, X: 7}
-//	board, err = game.PlaceBarrier(illegalPosition, PlayerOne)
-//	assert.NotNil(t, err, "expect 11th barrier to thY error")
-//	_, ok := board[illegalPosition]
-//	assert.False(t, ok, "barrier should not be on board")
-//	_, ok = game.Board[illegalPosition]
-//	assert.False(t, ok)
-//}
-//
-//func Test_PawnCannotMoveOverBarrier(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	game.PlaceBarrier(Position{1, 8}, PlayerOne)
-//	game.PlaceBarrier(Position{5, 6}, PlayerTwo)
-//	_, err := game.MovePawn(Position{2, 8}, PlayerOne)
-//	assert.NotNil(t, err, "Expected error")
-//	assert.Equal(t, "the pawn cannot reach that square", err.Error(), "Wrong message")
-//}
-//
-//func Test_OneValidDirection(t *testing.T) {
-//	board := make(Board)
-//	placePawn(board)
-//	placeBarrier(board)
-//
-//	moves := board.GetValidPawnMoves(Position{0, 0})
-//	assert.Len(t, moves, 1)
-//	assert.Equal(t, moves[0], Position{2, 0})
-//}
-//
-//func Test_JumpPawn(t *testing.T) {
-//	board := make(Board)
-//	setupPawnBlockingBoard(board)
-//	moves := board.GetValidPawnMoves(Position{0, 8})
-//	assert.Len(t, moves, 1)
-//	assert.Equal(t, moves[0], Position{4, 8})
-//}
-//
-//func Test_JumpDiagonal(t *testing.T) {
-//	board := make(Board)
-//	board[Position{2, 8}] = Piece{}
-//	board[Position{4, 8}] = Piece{}
-//
-//	//Barriers
-//	board[Position{0, 9}] = Piece{}
-//	board[Position{1, 9}] = Piece{}
-//	board[Position{2, 9}] = Piece{}
-//
-//	board[Position{0, 7}] = Piece{}
-//	board[Position{1, 7}] = Piece{}
-//	board[Position{2, 7}] = Piece{}
-//
-//	board[Position{5, 8}] = Piece{}
-//	board[Position{5, 9}] = Piece{}
-//	board[Position{5, 10}] = Piece{}
-//
-//	moves := board.GetValidPawnMoves(Position{2, 8})
-//	assert.Len(t, moves, 3)
-//
-//	expecteds := map[Position]bool{
-//		{4, 10}: true,
-//		{4, 6}:  true,
-//		{0, 8}:  true,
-//	}
-//	for _, move := range moves {
-//		if _, ok := expecteds[move]; !ok {
-//			t.Errorf("Missing expected move %v", move)
-//		}
-//	}
-//}
-//
-//func Test_FourDirectionsForFree(t *testing.T) {
-//	board := make(Board)
-//	board[Position{2, 8}] = Piece{}
-//
-//	moves := board.GetValidPawnMoves(Position{2, 8})
-//
-//	assert.Len(t, moves, 4)
-//}
-//
-//func Test_GameNotOver(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	assert.Equal(t, PlayerPosition(-1), game.MaybeReturnWinnerPlayerPosition())
-//}
-//
-//func Test_GameOver(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	p1Pawn := &game.Players[PlayerOne].Pawn
-//	delete(game.Board, p1Pawn.Position)
-//	p1Pawn.Position = Position{16, 8}
-//	game.Board[p1Pawn.Position] = *p1Pawn
-//
-//	assert.Equal(t, PlayerOne, game.MaybeReturnWinnerPlayerPosition())
-//}
-//
-//func Test_BarrierPlacementBlocksWin(t *testing.T) {
-//	var board = `.......|0|.......
-//.......|.|.......
-//.......|.|.......
-//.................
-//.................
-//.................
-//.................
-//.................
-//.................
-//.................
-//.................
-//.................
-//.................
-//.................
-//.................
-//.................
-//................`
-//
-//	game, err := BuildQuoidorBoardFromString(board)
-//	if err != nil {
-//		t.Error(err.Error())
-//	}
-//
-//	newBoard, err := game.PlaceBarrier(Position{3, 8}, PlayerOne)
-//	assert.NotNil(t, err)
-//	assertNoPiece(t, newBoard, Position{Y: 3, X: 8})
-//	assertNoPiece(t, newBoard, Position{Y: 3, X: 9})
-//	assertNoPiece(t, newBoard, Position{Y: 3, X: 10})
-//}
-//
-//func assertNoPiece(t *testing.T, board Board, position Position) {
-//	if _, exists := board[position]; exists {
-//		t.Error("found unexpected piece at Position: ", position)
-//	}
-//}
-//
-//func TestAddPlayer(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	playerId := uuid.New()
-//	player, err := game.AddPlayer(playerId, "Test Name")
-//	assert.NoError(t, err)
-//	assert.Equal(t, PlayerOne, player)
-//
-//	player, err = game.AddPlayer(uuid.New(), "Test Name")
-//	assert.NoError(t, err)
-//	assert.Equal(t, PlayerTwo, player)
-//}
-//
-//func Test_NewGame_PlayerOnesTurn(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	assert.Equal(t, game.CurrentTurn, PlayerOne)
-//}
-//
-//func Test_MovePawn_FailsIfWrongPlayer(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	_, err := game.MovePawn(Position{14, 8}, PlayerTwo)
-//	assert.Error(t, err)
-//}
-//
-//func Test_MovePawn_TurnCheck(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	game.MovePawn(Position{2, 8}, PlayerOne)
-//
-//	assert.Equal(t, game.CurrentTurn, PlayerTwo)
-//}
-//
-//func Test_MovePawnTwice_TurnCheck(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//	game.MovePawn(Position{2, 8}, PlayerOne)
-//	game.MovePawn(Position{14, 8}, PlayerTwo)
-//
-//	assert.Equal(t, game.CurrentTurn, PlayerOne)
-//}
-//
-//func Test_MovePawnFourTimes_FourPersonGame(t *testing.T) {
-//	var err error
-//	game := NewFourPersonGame(TestUUID)
-//	game.MovePawn(Position{2, 8}, PlayerOne)
-//	game.MovePawn(Position{14, 8}, PlayerTwo)
-//	_, err = game.MovePawn(Position{8, 2}, PlayerThree)
-//	assert.NoError(t, err)
-//	_, err = game.MovePawn(Position{8, 14}, PlayerFour)
-//	assert.NoError(t, err)
-//
-//	assert.Equal(t, game.CurrentTurn, PlayerOne)
-//}
-//
-//func Test_PlaceBarrier_WrongTurn(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//
-//	_, err := game.PlaceBarrier(Position{1, 2}, PlayerTwo)
-//
-//	assert.Error(t, err)
-//	assert.EqualError(t, err, "wrong turn, current turn is for Player: 0")
-//}
-//
-//func Test_PlaceBarrierChangesTurnTwoPlayer(t *testing.T) {
-//	game := NewTwoPersonGame(TestUUID)
-//
-//	game.PlaceBarrier(Position{1, 2}, PlayerOne)
-//
-//	assert.Equal(t, game.CurrentTurn, PlayerTwo)
-//}
-//
-//func Test_MultiplePlaceBarrier(t *testing.T) {
-//	game := NewFourPersonGame(TestUUID)
-//
-//	game.PlaceBarrier(Position{1, 2}, PlayerOne)
-//	game.PlaceBarrier(Position{3, 2}, PlayerTwo)
-//	game.PlaceBarrier(Position{5, 2}, PlayerThree)
-//	game.PlaceBarrier(Position{7, 2}, PlayerFour)
-//
-//	assert.Equal(t, game.CurrentTurn, PlayerOne)
-//
-//}
+func Test_InvalidMoves(t *testing.T) {
+	board :=
+		`........1........
+.................
+.................
+.................
+.................
+.................
+.................
+.................
+.................
+.................
+.................
+.................
+.................
+.................
+.......|.........
+.......|---......
+.......|0........`
+	game, err := BuildQuoridorBoardFromString(board)
+	assert.NoError(t, err)
 
-func setupPawnBlockingBoard(board Board) {
-	//Pawns
-	board[Position{0, 8}] = Piece{}
-	board[Position{2, 8}] = Piece{}
+	err = game.MovePawn(Position{X: 8, Y: 14}, PlayerOne)
+	assert.EqualError(t, err, "the Pawn cannot reach that square")
 
-	//Barriers
-	board[Position{0, 9}] = Piece{}
-	board[Position{1, 9}] = Piece{}
-	board[Position{2, 9}] = Piece{}
-	board[Position{0, 7}] = Piece{}
-	board[Position{1, 7}] = Piece{}
-	board[Position{2, 7}] = Piece{}
+	err = game.MovePawn(Position{X: 6, Y: 16}, PlayerOne)
+	assert.EqualError(t, err, "the Pawn cannot reach that square")
+
+	err = game.MovePawn(Position{X: 9, Y: 16}, PlayerOne)
+	assert.EqualError(t, err, "invalid Pawn location")
 }
 
-func placeBarrier(board Board) {
-	board[Position{0, 1}] = Piece{}
-	board[Position{1, 1}] = Piece{}
-	board[Position{1, 1}] = Piece{}
+func Test_DiagonalJump(t *testing.T) {
+	board :=
+		`.................
+.................
+.................
+.................
+.................
+.................
+.................
+........---......
+.......|1........
+.......|.........
+.......|0........
+.................
+.................
+.................
+.................
+.................
+.................`
+
+	game, err := BuildQuoridorBoardFromString(board)
+	assert.NoError(t, err)
+
+	// Try going to the wrong diagonal.
+	err = game.MovePawn(Position{X: 6, Y: 8}, PlayerOne)
+	assert.EqualError(t, err, "the Pawn cannot reach that square")
+
+	// Go to the correct diagonal
+	err = game.MovePawn(Position{X: 10, Y: 8}, PlayerOne)
+	assert.NoError(t, err)
+	assert.Equal(t, Position{X: 10, Y: 8}, game.Players[PlayerOne].Pawn.Position)
+
+	// Player two tries to use diagonal without a valid back barrier.
+	err = game.MovePawn(Position{X: 10, Y: 6}, PlayerTwo)
+	assert.EqualError(t, err, "the Pawn cannot reach that square")
 }
 
-func placePawn(board Board) {
-	board[Position{0, 0}] = Piece{}
+func Test_PlaceVerticalBarrier(t *testing.T) {
+	testCases := []struct {
+		position Position
+		player   PlayerPosition
+	}{
+		{Position{X: 1, Y: 0}, PlayerOne},
+		{Position{X: 3, Y: 0}, PlayerTwo},
+		{Position{X: 5, Y: 0}, PlayerThree},
+		{Position{X: 7, Y: 0}, PlayerFour},
+
+		{Position{X: 9, Y: 0}, PlayerOne},
+		{Position{X: 11, Y: 0}, PlayerTwo},
+		{Position{X: 13, Y: 0}, PlayerThree},
+		{Position{X: 15, Y: 0}, PlayerFour},
+
+		{Position{X: 1, Y: 4}, PlayerOne},
+		{Position{X: 3, Y: 4}, PlayerTwo},
+		{Position{X: 5, Y: 4}, PlayerThree},
+		{Position{X: 7, Y: 4}, PlayerFour},
+
+		{Position{X: 9, Y: 4}, PlayerOne},
+		{Position{X: 11, Y: 4}, PlayerTwo},
+		{Position{X: 13, Y: 4}, PlayerThree},
+		{Position{X: 15, Y: 4}, PlayerFour},
+
+		{Position{X: 1, Y: 8}, PlayerOne},
+		{Position{X: 3, Y: 8}, PlayerTwo},
+		{Position{X: 5, Y: 8}, PlayerThree},
+		{Position{X: 7, Y: 8}, PlayerFour},
+	}
+
+	game := NewGameWithPlayers(4)
+
+	for idx, tc := range testCases {
+		err := game.PlaceBarrier(tc.position, tc.player)
+		assert.NoError(t, err)
+		for offset := 0; offset < 3; offset++ {
+			expectedPosition := tc.position
+			expectedPosition.Y += offset
+			placedPiece, ok := game.Board[expectedPosition]
+			assert.True(t, ok, "expected piece at %v", expectedPosition)
+			assert.Equal(t, tc.player, placedPiece.Owner)
+			assert.Equal(t, Barrier, placedPiece.Type)
+		}
+		assert.Equal(t, 4-(idx/4), game.Players[tc.player].Barriers)
+	}
 }
 
-func assertNoExtraPlayersCreated(t *testing.T, game *Game) {
-	assert.Nil(t, game.Players[PlayerThree])
-	assert.Nil(t, game.Players[PlayerFour])
+func Test_PlaceHorizontalBarrier(t *testing.T) {
+	testCases := []struct {
+		position Position
+		player   PlayerPosition
+	}{
+		{Position{X: 0, Y: 1}, PlayerOne},
+		{Position{X: 0, Y: 3}, PlayerTwo},
+		{Position{X: 0, Y: 5}, PlayerThree},
+		{Position{X: 0, Y: 7}, PlayerFour},
+
+		{Position{X: 0, Y: 9}, PlayerOne},
+		{Position{X: 0, Y: 11}, PlayerTwo},
+		{Position{X: 0, Y: 13}, PlayerThree},
+		{Position{X: 0, Y: 15}, PlayerFour},
+
+		{Position{X: 4, Y: 1}, PlayerOne},
+		{Position{X: 4, Y: 3}, PlayerTwo},
+		{Position{X: 4, Y: 5}, PlayerThree},
+		{Position{X: 4, Y: 7}, PlayerFour},
+
+		{Position{X: 4, Y: 9}, PlayerOne},
+		{Position{X: 4, Y: 11}, PlayerTwo},
+		{Position{X: 4, Y: 13}, PlayerThree},
+		{Position{X: 4, Y: 15}, PlayerFour},
+
+		{Position{X: 8, Y: 1}, PlayerOne},
+		{Position{X: 8, Y: 3}, PlayerTwo},
+		{Position{X: 8, Y: 5}, PlayerThree},
+		{Position{X: 8, Y: 7}, PlayerFour},
+	}
+
+	game := NewGameWithPlayers(4)
+
+	for idx, tc := range testCases {
+		err := game.PlaceBarrier(tc.position, tc.player)
+		assert.NoError(t, err)
+		for offset := 0; offset < 3; offset++ {
+			expectedPosition := tc.position
+			expectedPosition.X += offset
+			placedPiece, ok := game.Board[expectedPosition]
+			assert.True(t, ok, "expected piece at %v", expectedPosition)
+			assert.Equal(t, tc.player, placedPiece.Owner)
+			assert.Equal(t, Barrier, placedPiece.Type)
+		}
+		assert.Equal(t, 4-(idx/4), game.Players[tc.player].Barriers)
+	}
 }
 
-func assertCorrectPlayerInit(t *testing.T, game *Game) {
-	assert.NotNil(t, game.Players[PlayerOne], "Initialized Player one!")
-	assert.NotNil(t, game.Players[PlayerTwo], "Initialized Player two!")
-	assert.Equal(t, Position{0, 8}, game.Players[PlayerOne].Pawn.Position)
-	assert.Equal(t, Position{16, 8}, game.Players[PlayerTwo].Pawn.Position)
-	assert.Equal(t, 10, game.Players[PlayerOne].Barriers)
-	assert.Equal(t, 10, game.Players[PlayerTwo].Barriers)
+func Test_PlaceBarrierErrors(t *testing.T) {
+	board :=
+		`........1........
+---.---.---.---..
+.................
+..............---
+.................
+.................
+.................
+.................
+3...............4
+.................
+.................
+.................
+.................
+.................
+.................
+.................
+........0........`
+	game, err := BuildQuoridorBoardFromString(board)
+	assert.NoError(t, err)
+
+	err = game.PlaceBarrier(Position{X: 13, Y: 2}, PlayerOne)
+	assert.EqualError(t, err, "the barrier prevents a players victory")
+
+	err = game.PlaceBarrier(Position{X: 9, Y: 9}, PlayerOne)
+	assert.EqualError(t, err, "invalid location for a barrier")
+
+	err = game.PlaceBarrier(Position{X: 1, Y: 0}, PlayerOne)
+	assert.EqualError(t, err, "the new barrier intersects with another")
 }
 
-func assertBaseGame(t *testing.T, game *Game) {
-	assert.NotNil(t, game.Board, "Board should be initialized")
-	assert.NotNil(t, game.Board, "Pieces of board should be initialized")
-	assert.Equal(t, 2, len(game.Players), "Should be 4 players")
+func Test_WinCondition(t *testing.T) {
+	game := NewGameWithPlayers(2)
+	turns := []struct {
+		position Position
+		player   PlayerPosition
+	}{
+		{Position{X: 8, Y: 14}, PlayerOne},
+		{Position{X: 8, Y: 2}, PlayerTwo},
+
+		{Position{X: 8, Y: 12}, PlayerOne},
+		{Position{X: 8, Y: 4}, PlayerTwo},
+
+		{Position{X: 8, Y: 10}, PlayerOne},
+		{Position{X: 8, Y: 6}, PlayerTwo},
+
+		{Position{X: 8, Y: 8}, PlayerOne},
+		{Position{X: 8, Y: 10}, PlayerTwo},
+
+		{Position{X: 8, Y: 6}, PlayerOne},
+		{Position{X: 8, Y: 12}, PlayerTwo},
+
+		{Position{X: 8, Y: 4}, PlayerOne},
+		{Position{X: 8, Y: 14}, PlayerTwo},
+
+		{Position{X: 8, Y: 2}, PlayerOne},
+		{Position{X: 8, Y: 16}, PlayerTwo},
+	}
+
+	for _, turn := range turns {
+		err := game.MovePawn(turn.position, turn.player)
+		assert.NoError(t, err)
+	}
+
+	err := game.MovePawn(Position{X: 8, Y: 0}, PlayerOne)
+	assert.EqualError(t, err, "invalid move, game is already over")
+
+	err = game.PlaceBarrier(Position{X: 1, Y: 0}, PlayerOne)
+	assert.EqualError(t, err, "invalid move, game is already over")
+
+	assert.Equal(t, PlayerTwo, game.Winner)
+	assert.False(t, game.EndDate.IsZero())
 }
