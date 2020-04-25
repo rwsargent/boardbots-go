@@ -1,0 +1,23 @@
+.grid-ctn
+  display: grid
+  grid-template-columns: repeat(8, 40px 12px) 40px
+  grid-template-rows: repeat(8, 40px 12px) 40px
+  background-color: #8A3324
+  width: 456px // calculated from columns
+  margin: 0 auto
+  padding: 10px 10px
+  border-radius: 8px
+
+.sqr
+  background-color: #444
+  border: 1px solid black
+
+.gutter:not(.vert)
+  -webkit-box-shadow: inset 0px 5px 5px -5px rgba(18,18,18,1)
+  -moz-box-shadow: inset 0px 5px 5px -5px rgba(18,18,18,1)
+  box-shadow: inset 0px 5px 5px -5px rgba(18,18,18,1)
+
+.wrapper
+  display: grid
+  grid-template-columns: repeat(3, 1fr)
+  grid-template-rows: 100px 100px

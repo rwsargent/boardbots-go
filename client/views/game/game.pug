@@ -1,0 +1,13 @@
+extends ../layout
+
+block content
+    .container
+        .row.main
+            .game-board(onclick="gameBoardMessage()")
+                | Game Board
+                include board.pug
+            .game-info
+                | Game Info
+        .row
+            .player-info
+                | Player Info

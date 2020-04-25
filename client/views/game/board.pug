@@ -1,0 +1,17 @@
+- var part = 0;
+.grid-ctn
+  while part < 289
+      - let col = part % 17;
+      - let row = Math.floor(part / 17); // Can't use math.round()
+      - let isRowEven = row % 2 === 0;
+      - let isColEven = col % 2 === 0;
+      - let classes = [];
+      if isRowEven && isColEven
+          - classes.push("sqr");
+      else if !isRowEven && !isColEven
+          - classes.push("inter");
+      else if !isColEven || !isRowEven
+          - classes.push("gutter");
+          - classes.push(!isColEven ? "vert" : "horiz");
+      div(class=classes.join(" ") id=col + "," + row)
+      - part++

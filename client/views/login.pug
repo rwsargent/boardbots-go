@@ -1,0 +1,15 @@
+extends layout
+
+block content
+    .container
+        p This should only be seen in developer mode.
+        if failed
+            p Authenticate failed.
+        form.login(action="/auth/auth", method="post")
+            .fields
+                label(for="name") Username
+                input(type="text" placeholder="Username" name="name" id="name" required)
+
+                label(for="psw") Password
+                input(type="password" id="psw" name="password")
+                input(type="submit" value="Submit")

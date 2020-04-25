@@ -1,0 +1,12 @@
+extends layout
+
+block content
+    .container
+        form.login(action="/auth")
+            .fields
+                label(for="name") Username
+                input(type="text" placeholder="Username" name="name" id="name" required)
+
+                label(for="psw") Password
+                input(type="password" id="psw")
+                input(type="submit" value="Submit")
