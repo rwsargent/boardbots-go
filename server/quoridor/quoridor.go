@@ -67,6 +67,7 @@ const (
 	PlayerTwo
 	PlayerThree
 	PlayerFour
+	InvalidPlayer = -1
 )
 
 const (
@@ -468,4 +469,13 @@ func (board Board) GetValidPawnMoves(pawnPosition Position) []Position {
 		validPositions = append(validPositions, board.getValidMoveByDirection(pawnPosition, d)...)
 	}
 	return validPositions
+}
+
+func (game *Game) GetPlayerPosition(playerId uuid.UUID) PlayerPosition {
+	for position, p := range game.Players {
+		if p.PlayerId == playerId {
+			return position
+		}
+	}
+	return InvalidPlayer
 }

@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"github.com/labstack/echo/v4/middleware"
+	"github.com/rwsargent/boardbots/server/server"
+	"github.com/rwsargent/boardbots/server/web/authorization"
 	"os"
 	"os/signal"
 	"time"
@@ -14,6 +18,16 @@ func main() {
 	// Setup
 	e := echo.New()
 	e.Logger.SetLevel(log.INFO)
+	e.Use(middleware.Logger())
+	e.Use(middleware.BodyDumpWithConfig(middleware.BodyDumpConfig{
+		Handler : func(e echo.Context, reqBody []byte, resBody []byte) {
+			fmt.Printf(fmt.Sprintf("body: %s\n", string(reqBody)))
+		},
+	}))
+
+	server := server.NewServer()
+
+	authorization.RegisterRoutes(e, server.Authenticator, server.UserFinder)
 
 	// Start server
 	go func() {
