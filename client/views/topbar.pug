@@ -1,0 +1,8 @@
+section.top-bar
+    .menu-button
+    .title #{title}
+    .user
+        if user
+            span Welcome!
+        else
+            a(href="/auth/login") Log In
