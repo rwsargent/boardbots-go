@@ -1,38 +1,13 @@
 import express from "express";
-import {AuthRequest, AuthResponse} from "../pb/boardbots_pb";
-import promises from "fs";
-import {getClient} from "../bb-client/client";
+import connection from "../connection/connection";
 
 const router = express.Router();
 
-
-function newAuthRequest(username: string, password: string): AuthRequest {
-    const authReq = new AuthRequest();
-    authReq.setUsername(username);
-    authReq.setPassword(password);
-    return authReq;
-}
-
-function clientSideAuthentication(username: string, password: string): string {
-    let path = process.env["USER_FILE_PATH"];
-    console.log("promises: " + promises);
-    const fileData = promises.readFileSync(path, "utf8");
-    const users = JSON.parse(fileData);
-    if (users[username] && users[username].password === password) {
-        return "FAKETOKEN" + users[username].token;
-    }
-    return "";
-}
-
-function setCookie(res: express.Response, token: string) {
-    res.cookie("bb-token", token, {
-        httpOnly: false,
-        expires : new Date()
-    });
-}
-
-/* GET home page. */
+// Simple path to login - Only render login form if the app is in DEV mode.
 router.get("/login", (req: express.Request, res: express.Response) => {
+    if(process.env["NODE_ENV"] !== "dev") {
+        return res.sendStatus(403);
+    }
     res.render("login",
         {
             title: "BoardBots" ,
@@ -40,25 +15,22 @@ router.get("/login", (req: express.Request, res: express.Response) => {
             failed : Boolean(req.query.auth)});
 });
 
+// Authenticates dev credentials against backend server. Redirects to homepage on success.
 router.post("/auth", (req: express.Request, res: express.Response) => {
     const username = req.body.name;
     const password = req.body.password;
-    //@ts-ignore
-    getClient().authenticate(newAuthRequest(username, password), {}, (err, authRes: AuthResponse) => {
-        if(err || (authRes && !authRes.getToken())) {
-            let token = clientSideAuthentication(username, password);
-            if(token) {
-                setCookie(res, token);
+    const conn = connection(req);
+    conn.post("/auth/login ", {username : username, password: password})
+        .then(response => {
+            if (response.status === 200) {
+                res.cookie("SESSION", response.data.token, {maxAge: 900000, httpOnly: true});
                 res.redirect("/");
-            } else {
-                res.redirect("/auth/login?auth=failed&err=notoken");
             }
-        } else {
-            const token = authRes.getToken();
-            setCookie(res, token);
-            res.redirect("/");
-        }
-    });
+        }).catch(err => {
+            const code = err?.response?.status || 500;
+            const string = err?.response?.data || "error";
+            res.redirect("/auth/login?auth=fail")
+        });
 });
 
 export = router;

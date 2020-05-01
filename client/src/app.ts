@@ -9,7 +9,7 @@ import indexRouter from "./routes/index";
 import usersRouter from "./routes/users";
 import connectRouter from "./routes/connection";
 import authRouter from "./routes/auth";
-
+import validator from "./middleware/authenticate";
 const app = express();
 
 // view engine setup
@@ -28,12 +28,13 @@ app.use(sassMiddleware({
     indentedSyntax: true, // true = .sass and false = .scss
     sourceMap: true
 }));
-app.use(express.static(path.join(__dirname, "public")));
+app.use("/public", express.static(path.join(__dirname, "public")));
 
+// app.use("/", validator);
 app.use("/", indexRouter);
 app.use("/auth", authRouter);
-app.use("/users", usersRouter);
-app.use("/connect", connectRouter);
+// app.use("/users", usersRouter);
+// app.use("/connect", connectRouter);
 
 // catch 404 and forward to error handler
 app.use(function(req, res, next) {
