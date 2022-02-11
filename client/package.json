@@ -47,7 +47,7 @@
     "@typescript-eslint/parser": "^1.13.0",
     "concurrently": "^4.1.1",
     "eslint": "^6.1.0",
-    "grpc": "^1.22.2",
+    "grpc": "^1.24.11",
     "grpc-tools": "^1.8.0",
     "node-sass": "^7.0.0",
     "nodemon": "^1.19.1",
