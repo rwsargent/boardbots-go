@@ -13,3 +13,6 @@
 
 # IDEA files
 **/.idea/*
+
+#ignore vscode
+.vscode
