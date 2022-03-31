@@ -112,6 +112,10 @@ func Post[Req any, Res any, S any](bbClient *BoardBotClient[S], path string, bod
 		return resp, nil
 	}
 
+	if _, ok := any(resp).(string); ok {
+		return resp, nil
+	}
+
 	err = json.Unmarshal(responseBody, &resp)
 	if err != nil {
 		return resp, err

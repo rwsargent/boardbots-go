@@ -118,7 +118,9 @@ func placeRobotMove(game *lockitdown.GameState, playerPosition int) client.MoveC
 
 	for _, found := game.Robots[lockitdown.Pair{Q: placePosition.pos.Q, R: placePosition.pos.R}]; found; {
 		placePosition = edges[rand.Intn(len(edges))]
+		_, found = game.Robots[lockitdown.Pair{Q: placePosition.pos.Q, R: placePosition.pos.R}]
 	}
+
 	return client.MoveCommand{
 		Json: client.MoveT{
 			Player: playerPosition,
