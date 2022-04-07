@@ -6,6 +6,7 @@ package lockitdown
 import (
 	"encoding/json"
 	"fmt"
+	"sync"
 )
 
 type (
@@ -51,6 +52,8 @@ type (
 		MovesThisTurn    int
 		RequiresTieBreak bool
 		Winner           int
+		currentMove      *GameMove
+		saveStack        []SaveState
 	}
 
 	TurnDirection int
@@ -72,6 +75,20 @@ var (
 	SE Pair = Pair{0, 1}
 	SW Pair = Pair{-1, 1}
 	W  Pair = Pair{-1, 0}
+
+	Cardinals = []Pair{E, SE, SW, W, NW, NE}
+
+	moveBufferPool = sync.Pool{
+		New: func() any {
+			return make([]*GameMove, 0, 128)
+		},
+	}
+
+	movePool = sync.Pool{
+		New: func() any {
+			return new(GameMove)
+		},
+	}
 )
 
 func (p *Pair) Plus(that Pair) {
@@ -84,8 +101,30 @@ func (p *Pair) Minus(that Pair) {
 	p.R -= that.R
 }
 
+func (p Pair) String() string {
+	return fmt.Sprintf("{%d, %d}", p.Q, p.R)
+}
+
 func (p Pair) S() int {
 	return -p.Q - p.R
+}
+
+func (p Pair) Copy() Pair {
+	return p
+}
+
+func (p Pair) Dist() int {
+	return (intAbs(p.Q) + intAbs(p.R) + intAbs(p.S())) / 2
+}
+
+func (r *Robot) Disable() {
+	r.IsBeamEnabled = false
+	r.IsLockedDown = true
+}
+
+func (r *Robot) Enable() {
+	r.IsBeamEnabled = true
+	r.IsLockedDown = false
 }
 
 func NewGame(gameDef GameDef) *GameState {
@@ -101,6 +140,7 @@ func NewGame(gameDef GameDef) *GameState {
 		MovesThisTurn:    gameDef.MovesPerTurn,
 		RequiresTieBreak: false,
 		Winner:           -1,
+		saveStack:        make([]SaveState, 0),
 	}
 }
 
@@ -116,11 +156,15 @@ func (p *Pair) Rotate(direction TurnDirection) {
 	}
 }
 
-func (game *GameState) Move(move Move, player PlayerPosition) error {
-	if player != PlayerPosition(game.PlayerTurn) {
-		return fmt.Errorf("wrong player, expected %d, was %d", game.PlayerTurn, player)
+func (game *GameState) Move(move *GameMove) error {
+	game.currentMove = move
+	if move.Player != PlayerPosition(game.PlayerTurn) {
+		return fmt.Errorf("wrong player, expected %d, was %d", game.PlayerTurn, move.Player)
 	}
-	err := move.Move(game, player)
+
+	game.saveState()
+	err := move.Move(game)
+
 	if err != nil {
 		return err
 	}
@@ -142,6 +186,25 @@ func (game *GameState) Move(move Move, player PlayerPosition) error {
 	return nil
 }
 
+func (game *GameState) Undo(move *GameMove) error {
+	game.currentMove = move
+
+	err := move.Undo(game)
+	game.revertState()
+
+	if err != nil {
+		return err
+	}
+
+	err = game.resolveMove()
+
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (game *GameState) resolveMove() error {
 	for resolved := false; !resolved; {
 		targeted := game.taretedRobots()
@@ -160,6 +223,11 @@ func (game *GameState) resolveMove() error {
 
 func (game *GameState) updateLockedRobots(targeted map[Pair][]*Robot) bool {
 	resolved := true
+	// clear state on bots
+	for _, robot := range game.Robots {
+		robot.Enable()
+	}
+
 	for hex, attackers := range targeted {
 		if len(attackers) == 1 {
 			continue
@@ -170,7 +238,7 @@ func (game *GameState) updateLockedRobots(targeted map[Pair][]*Robot) bool {
 		}
 		if len(attackers) == 2 {
 			if locked, ok := game.Robots[hex]; ok {
-				locked.IsLockedDown = true
+				locked.Disable()
 			}
 		}
 	}
@@ -239,11 +307,13 @@ func (game *GameState) isCorridor(pair Pair) bool {
 }
 
 func (game *GameState) shutdownRobot(hex Pair, attackers []*Robot) {
+	game.saveRobot(game.Robots[hex])
 	for _, attacker := range attackers {
 		game.Players[attacker.Player].Points += 1
 	}
 
 	delete(game.Robots, hex)
+
 }
 
 func (game *GameState) checkGameOver() (bool, int) {
@@ -280,6 +350,79 @@ func (g *GameState) ToJson() (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// as an optimization, PossibleMoves takes a buffer to avoid allocating every call.
+func (g *GameState) PossibleMoves(buf []*GameMove) []*GameMove {
+	moves := buf
+	if g.MovesThisTurn == 3 && g.playerBotsInCorridor() < 2 {
+		edges := edges(g.GameDef.Board.HexaBoard.ArenaRadius + 1)
+		for _, edge := range edges {
+			if _, found := g.Robots[edge.position]; !found {
+				m := movePool.Get().(*GameMove)
+				m.Mover = &PlaceRobot{
+					Hex:       edge.position,
+					Direction: edge.direction,
+				}
+				m.Player = g.PlayerTurn
+				moves = append(moves, m)
+			}
+		}
+	}
+	return moves
+}
+
+func (g *GameState) playerBotsInCorridor() int {
+	corridorBots := 0
+	for _, bot := range g.Robots {
+		if bot.Player == g.PlayerTurn {
+			if g.isCorridor(bot.Position) {
+				corridorBots++
+			}
+		}
+	}
+	return corridorBots
+}
+
+func inBounds(size int, position Pair) bool {
+	return position.Dist() <= size
+}
+
+func (state *GameState) saveState() {
+	save := SaveState{
+		players:        []Player{},
+		shutdownRobots: []*Robot{},
+		movesThisTurn:  0,
+		player:         0,
+	}
+	for _, player := range state.Players {
+		save.players = append(save.players, *player)
+	}
+	save.player = state.PlayerTurn
+	save.movesThisTurn = state.MovesThisTurn
+	state.saveStack = append(state.saveStack, save)
+}
+
+func (state *GameState) saveRobot(robot *Robot) {
+	save := &state.saveStack[len(state.saveStack)-1]
+	save.shutdownRobots = append(save.shutdownRobots, robot)
+}
+
+func (state *GameState) revertState() {
+	save := state.saveStack[len(state.saveStack)-1]
+	for _, bot := range save.shutdownRobots {
+		state.Robots[bot.Position] = bot
+	}
+
+	for i, player := range save.players {
+		state.Players[i].PlacedRobots = player.PlacedRobots
+		state.Players[i].Points = player.Points
+	}
+
+	state.PlayerTurn = save.player
+	state.MovesThisTurn = save.movesThisTurn
+
+	state.saveStack = state.saveStack[:len(state.saveStack)-1]
 }
 
 func intAbs(num int) int {

@@ -56,7 +56,7 @@ func ConvertToTransport(game *GameState) *TransportState {
 		GameDef:          game.GameDef,
 		Players:          players,
 		Robots:           robots,
-		MovesThisTurn:    game.MovesThisTurn,
+		MovesThisTurn:    game.GameDef.MovesPerTurn - game.MovesThisTurn,
 		Status:           status,
 		RequiresTieBreak: game.RequiresTieBreak,
 		PlayerTurn:       int(game.PlayerTurn) + 1,
@@ -95,7 +95,7 @@ func StateFromTransport(tState *TransportState) *GameState {
 		Players:          players,
 		Robots:           robots,
 		PlayerTurn:       PlayerPosition(tState.PlayerTurn - 1),
-		MovesThisTurn:    tState.MovesThisTurn,
+		MovesThisTurn:    tState.GameDef.MovesPerTurn - tState.MovesThisTurn,
 		RequiresTieBreak: tState.RequiresTieBreak,
 		Winner:           winner,
 	}
