@@ -1,8 +1,10 @@
 package lockitdown
 
 import (
+	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/rwsargent/boardbots-go/internal/minimax"
 	"github.com/stretchr/testify/assert"
@@ -82,5 +84,24 @@ func BenchmarkMinimaxWithIterator(b *testing.B) {
 
 	for n := 0; n < b.N; n++ {
 		_ = MinimaxWithIterator(&root, 3)
+	}
+}
+
+func BenchmarkAlphaBetaVariousDepths(b *testing.B) {
+	game := NewGame(TwoPlayerGameDef)
+	root := MinimaxNode{
+		GameState: game,
+		GameMove:  nil,
+		Searcher:  0,
+		Evaluator: ScoreGameState,
+	}
+
+	for depth := 1; depth < 8; depth++ {
+		b.Run(fmt.Sprintf("depth_%d", depth), func(b *testing.B) {
+			for i := 0; i < b.N; i++ {
+				ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+				AlphaBeta(ctx, &root, depth)
+			}
+		})
 	}
 }

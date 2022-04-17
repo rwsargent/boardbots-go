@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"time"
@@ -64,7 +65,8 @@ func main() {
 			Evaluator: lockitdown.ScoreGameState,
 		}
 
-		best := lockitdown.MinimaxWithIterator(root, 3)
+		ctx, _ := context.WithTimeout(context.Background(), 10*time.Second)
+		best := lockitdown.AlphaBeta(ctx, root, 10)
 
 		fmt.Printf("%s making move: %+v\n", bbClient.Credentials.Username, best.GameMove)
 		movet := best.GameMove.ToTransport()
