@@ -87,6 +87,8 @@ func (m *AdvanceRobot) Move(game *GameState, player PlayerPosition) error {
 
 	m.Robot = robot.Position
 	game.MovesThisTurn -= 1
+
+	robot.IsBeamEnabled = !game.isCorridor(robot.Position)
 	return nil
 }
 
@@ -101,6 +103,8 @@ func (m *AdvanceRobot) Undo(game *GameState, player PlayerPosition) error {
 	robot.Position.Minus(robot.Direction)
 	game.Robots[robot.Position] = robot
 	m.Robot = robot.Position
+
+	robot.IsBeamEnabled = !game.isCorridor(robot.Position)
 
 	return nil
 }

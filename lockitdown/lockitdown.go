@@ -60,6 +60,7 @@ type (
 
 	TieBreak struct {
 		Robots []*Robot
+		State  string
 	}
 )
 
@@ -211,8 +212,10 @@ func (game *GameState) resolveMove() error {
 
 		if tiebreaks := game.checkForTieBreaks(targeted); len(tiebreaks) > 0 {
 			game.RequiresTieBreak = true
+			json, _ := game.ToJson()
 			return TieBreak{
 				Robots: tiebreaks,
+				State:  json,
 			}
 		}
 
@@ -300,10 +303,9 @@ func (game *GameState) taretedRobots() map[Pair][]*Robot {
 }
 
 func (game *GameState) isCorridor(pair Pair) bool {
-	s := pair.S()
 	board := game.GameDef.Board.HexaBoard
 	corridor := board.ArenaRadius + 1
-	return intAbs(s) == corridor || intAbs(pair.Q) == corridor || intAbs(pair.R) == corridor
+	return pair.Dist() == corridor
 }
 
 func (game *GameState) shutdownRobot(hex Pair, attackers []*Robot) {

@@ -67,7 +67,7 @@ func (it *MoveIterator) findNext() {
 	ringSize := it.game.GameDef.Board.HexaBoard.ArenaRadius + 1
 	botIdx := -1
 	for _, bot := range it.game.Robots {
-		if bot.Player == it.game.PlayerTurn {
+		if bot.Player == it.game.PlayerTurn && !bot.IsLockedDown {
 			botIdx++
 			if botIdx == it.robotIndex {
 				it.robotIndex++
