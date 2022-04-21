@@ -35,7 +35,7 @@ type (
 	}
 
 	PlaceRobot struct {
-		Hex, Direction Pair
+		Robot, Direction Pair
 	}
 
 	InnerPlaceRobotT struct {
@@ -121,7 +121,7 @@ func (m *PlaceRobot) Move(game *GameState, player PlayerPosition) error {
 	if game.MovesThisTurn != 3 {
 		return errors.New("can only place a robot on your first action of the turn")
 	}
-	if !game.isCorridor(m.Hex) {
+	if !game.isCorridor(m.Robot) {
 		return errors.New("must place robot in corridor")
 	}
 
@@ -137,8 +137,8 @@ func (m *PlaceRobot) Move(game *GameState, player PlayerPosition) error {
 		return errors.New("can only have two robots in the corridor at a time")
 	}
 
-	game.Robots[m.Hex] = &Robot{
-		Position:      m.Hex,
+	game.Robots[m.Robot] = &Robot{
+		Position:      m.Robot,
 		Direction:     m.Direction,
 		IsBeamEnabled: true,
 		IsLockedDown:  false,
@@ -152,13 +152,13 @@ func (m *PlaceRobot) Move(game *GameState, player PlayerPosition) error {
 }
 
 func (m *PlaceRobot) Undo(game *GameState, player PlayerPosition) error {
-	delete(game.Robots, m.Hex)
+	delete(game.Robots, m.Robot)
 	return nil
 }
 
 func (m PlaceRobot) ToTransport() BoardbotsMove {
 	return BoardbotsMove{
-		Position: m.Hex,
+		Position: m.Robot,
 		Action: PlaceRobotT{
 			PlaceRobot: InnerPlaceRobotT{
 				Dir: m.Direction,

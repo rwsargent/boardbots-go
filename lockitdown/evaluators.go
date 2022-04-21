@@ -77,6 +77,14 @@ func scoreBotPosition(robot *Robot, game *GameState) int {
 			cursor.Plus(dir)
 		}
 		score -= attackableHexes
+	} else {
+		// If next move is into the arena, great.
+		next := robot.Position.Copy()
+		next.Plus(robot.Direction)
+		if !game.isCorridor(next) {
+			score += 1
+		}
+
 	}
 
 	// Encourage enemy bots in range

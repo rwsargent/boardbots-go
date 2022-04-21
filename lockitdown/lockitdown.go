@@ -363,7 +363,7 @@ func (g *GameState) PossibleMoves(buf []*GameMove) []*GameMove {
 			if _, found := g.Robots[edge.position]; !found {
 				m := movePool.Get().(*GameMove)
 				m.Mover = &PlaceRobot{
-					Hex:       edge.position,
+					Robot:     edge.position,
 					Direction: edge.direction,
 				}
 				m.Player = g.PlayerTurn
@@ -435,5 +435,5 @@ func intAbs(num int) int {
 }
 
 func (tiereak TieBreak) Error() string {
-	return "We have a tiebreak! TODO ME"
+	return fmt.Sprintf("Tiebreak: %s", tiereak.State)
 }
