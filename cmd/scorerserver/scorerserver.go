@@ -27,9 +27,12 @@ func main() {
 	port := flag.String("port", ":8888", "server port")
 	flag.Parse()
 
-	http.HandleFunc("/score", score)
+	http.HandleFunc("/api/score", score)
 
+	fmt.Printf("Now listening on port %s\n", *port)
 	http.ListenAndServe(*port, nil)
+
+	fmt.Println("done")
 }
 
 func score(w http.ResponseWriter, req *http.Request) {
@@ -37,8 +40,10 @@ func score(w http.ResponseWriter, req *http.Request) {
 	err := json.NewDecoder(req.Body).Decode(&scoreReqest)
 	defer req.Body.Close()
 
+	fmt.Printf("Request:\n%+v\n", scoreReqest)
+
 	if err != nil {
-		fmt.Printf("error reading body, %v", err)
+		fmt.Printf("error reading body, %v\n", err)
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
@@ -52,13 +57,13 @@ func score(w http.ResponseWriter, req *http.Request) {
 	resp := ScoreResponse{
 		score,
 	}
-	out, err := json.Marshal(resp)
-	if err != nil {
-		fmt.Printf("error marshaling response, %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
+	fmt.Printf("Response:\n%+v\n", resp)
 
-	_, err = w.Write(out)
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+	err = json.NewEncoder(w).Encode(resp)
+
 	if err != nil {
 		fmt.Printf("error writing response, %v", err)
 	}
