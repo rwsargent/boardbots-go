@@ -42,11 +42,11 @@ func TestMoves(t *testing.T) {
 		err    error
 	}{
 		{&PlaceRobot{
-			Hex:       Pair{0, 5},
+			Robot:     Pair{0, 5},
 			Direction: Pair{0, -1},
 		}, 0, nil},
 		{&PlaceRobot{
-			Hex:       Pair{5, 0},
+			Robot:     Pair{5, 0},
 			Direction: Pair{-1, 0},
 		}, 1, nil},
 		{&AdvanceRobot{
@@ -61,7 +61,7 @@ func TestMoves(t *testing.T) {
 			Direction: Left,
 		}, 0, nil},
 		{&PlaceRobot{
-			Hex:       Pair{-5, 4},
+			Robot:     Pair{-5, 4},
 			Direction: Pair{1, 0},
 		}, 1, nil},
 		{&TurnRobot{
@@ -99,7 +99,7 @@ func TestMoves(t *testing.T) {
 			Direction: Right,
 		}, 0, nil},
 		{&PlaceRobot{
-			Hex:       Pair{0, -5},
+			Robot:     Pair{0, -5},
 			Direction: Pair{0, 1},
 		}, 1, nil},
 		{&TurnRobot{
@@ -294,19 +294,19 @@ func TestPossibleMoves(t *testing.T) {
 	game := NewGame(TwoPlayerGameDef)
 	initMoves := []*GameMove{
 		NewMove(&PlaceRobot{
-			Hex:       Pair{-5, 0},
+			Robot:     Pair{-5, 0},
 			Direction: E,
 		}, 0),
 		NewMove(&PlaceRobot{
-			Hex:       Pair{5, 0},
+			Robot:     Pair{5, 0},
 			Direction: W,
 		}, 1),
 		NewMove(&PlaceRobot{
-			Hex:       Pair{0, -5},
+			Robot:     Pair{0, -5},
 			Direction: SE,
 		}, 0),
 		NewMove(&PlaceRobot{
-			Hex:       Pair{0, 5},
+			Robot:     Pair{0, 5},
 			Direction: NW,
 		}, 1),
 		NewMove(&AdvanceRobot{
@@ -593,7 +593,7 @@ func TestNilGameMoveFromState(t *testing.T) {
 
 	root := MinimaxNode{
 		GameState:    state,
-		GameMove:     nil,
+		GameMove:     GameMove{},
 		Searcher:     1,
 		Evaluator:    ScoreGameState,
 		MinimaxValue: 0,
@@ -606,8 +606,7 @@ func TestNilGameMoveFromState(t *testing.T) {
 }
 
 func TestFromState(t *testing.T) {
-
-	gamjson := `{
+	state := gameFromJson(`{
 		"gameDef": {
 		  "board": {
 			"HexaBoard": {
@@ -696,18 +695,11 @@ func TestFromState(t *testing.T) {
 		"status": "OnGoing",
 		"movesThisTurn": 2,
 		"requiresTieBreak": false
-	  }`
-
-	var tGame TransportState
-
-	err := json.Unmarshal([]byte(gamjson), &tGame)
-	assert.Nil(t, err)
-
-	state := StateFromTransport(&tGame)
+	  }`)
 
 	root := MinimaxNode{
 		GameState:    state,
-		GameMove:     nil,
+		GameMove:     GameMove{},
 		Searcher:     1,
 		Evaluator:    ScoreGameState,
 		MinimaxValue: 0,
@@ -717,5 +709,242 @@ func TestFromState(t *testing.T) {
 	assert.NotNil(t, move)
 	assert.NotNil(t, move.GameMove)
 	assert.NotNil(t, move.GameMove.Mover)
+}
 
+func TestEnterNoTieBreak(t *testing.T) {
+	game := NewGame(TwoPlayerGameDef)
+	game.Robots = map[Pair]*Robot{
+		{-4, 4}: {
+			Position:      Pair{-4, 4},
+			Direction:     NE,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        0,
+		},
+		{0, -4}: {
+			Position:      Pair{0, -4},
+			Direction:     E,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        0,
+		},
+		{-4, 0}: {
+			Position:      Pair{-4, 0},
+			Direction:     SE,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        1,
+		},
+		{5, -5}: {
+			Position:      Pair{5, -5},
+			Direction:     SW,
+			IsBeamEnabled: false,
+			IsLockedDown:  false,
+			Player:        1,
+		},
+	}
+	game.PlayerTurn = 1
+
+	move := AdvanceRobot{
+		Robot: Pair{5, -5},
+	}
+	err := game.Move(&GameMove{
+		Player: 1,
+		Mover:  &move,
+	})
+	assert.Nil(t, err)
+}
+
+func TestTurnLocksDownBot(t *testing.T) {
+	game := NewGame(TwoPlayerGameDef)
+	game.Robots = map[Pair]*Robot{
+		{-4, 4}: {
+			Position:      Pair{-4, 4},
+			Direction:     NE,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        0,
+		},
+		{0, -4}: {
+			Position:      Pair{0, -4},
+			Direction:     E,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        0,
+		},
+		{-4, 0}: {
+			Position:      Pair{-4, 0},
+			Direction:     SE,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        1,
+		},
+		{4, -4}: {
+			Position:      Pair{4, -4},
+			Direction:     SW,
+			IsBeamEnabled: false,
+			IsLockedDown:  true,
+			Player:        1,
+		},
+		{4, 0}: {
+			Position:      Pair{4, 0},
+			Direction:     W,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        0,
+		},
+	}
+
+	move := TurnRobot{
+		Robot:     Pair{-4, 4},
+		Direction: Left,
+	}
+	fmt.Println(game.ToJson())
+	err := game.Move(&GameMove{0, &move})
+	assert.Nil(t, err)
+
+	assert.True(t, game.Robots[Pair{-4, 4}].IsLockedDown)
+	assert.False(t, game.Robots[Pair{4, -4}].IsLockedDown)
+}
+
+func TestMoveIntoPotentialTieBreak(t *testing.T) {
+	game := gameFromJson(`{
+		"gameDef": {
+		  "board": {
+			"HexaBoard": {
+			  "arenaRadius": 4
+			}
+		  },
+		  "numOfPlayers": 0,
+		  "movesPerTurn": 3,
+		  "robotsPerPlayer": 6,
+		  "winCondition": "Elimination"
+		},
+		"players": [
+		  {
+			"points": 0,
+			"placedRobots": 3
+		  },
+		  {
+			"points": 0,
+			"placedRobots": 3
+		  }
+		],
+		"robots": [
+		  [
+			{
+			  "q": -3,
+			  "r": 3
+			},
+			{
+			  "player": 1,
+			  "dir": {
+				"q": 1,
+				"r": -1
+			  },
+			  "isLocked": true,
+			  "isBeamEnabled": false
+			}
+		  ],
+		  [
+			{
+			  "q": 0,
+			  "r": 4
+			},
+			{
+			  "player": 1,
+			  "dir": {
+				"q": 0,
+				"r": -1
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": true
+			}
+		  ],
+		  [
+			{
+			  "q": 5,
+			  "r": -5
+			},
+			{
+			  "player": 2,
+			  "dir": {
+				"q": 0,
+				"r": 1
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": false
+			}
+		  ],
+		  [
+			{
+			  "q": 1,
+			  "r": 3
+			},
+			{
+			  "player": 2,
+			  "dir": {
+				"q": -1,
+				"r": 0
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": true
+			}
+		  ],
+		  [
+			{
+			  "q": -4,
+			  "r": 4
+			},
+			{
+			  "player": 2,
+			  "dir": {
+				"q": 1,
+				"r": -1
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": true
+			}
+		  ],
+		  [
+			{
+			  "q": 0,
+			  "r": -4
+			},
+			{
+			  "player": 1,
+			  "dir": {
+				"q": 0,
+				"r": 1
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": true
+			}
+		  ]
+		],
+		"playerTurn": 2,
+		"status": "OnGoing",
+		"movesThisTurn": 1,
+		"requiresTieBreak": true
+	  }`)
+
+	err := game.Move(&GameMove{
+		Player: 1,
+		Mover: &AdvanceRobot{
+			Robot: Pair{1, 3},
+		},
+	})
+
+	assert.Nil(t, err)
+
+}
+
+func gameFromJson(jsonState string) *GameState {
+	var tGame TransportState
+	err := json.Unmarshal([]byte(jsonState), &tGame)
+	if err != nil {
+		panic(err)
+	}
+
+	return StateFromTransport(&tGame)
 }

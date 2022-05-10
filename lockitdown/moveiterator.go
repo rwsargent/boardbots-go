@@ -114,7 +114,7 @@ func (it *MoveIterator) findNext() {
 			it.edgeIndex++
 			if _, blocked := it.game.Robots[edge.position]; !blocked {
 				place := placePool.Get().(*PlaceRobot)
-				place.Hex = edge.position
+				place.Robot = edge.position
 				place.Direction = edge.direction
 				it.currentMove.Mover = place
 				it.currentMove.Player = it.game.PlayerTurn

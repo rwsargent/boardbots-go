@@ -8,7 +8,6 @@ import (
 type (
 	Mover interface {
 		Move(*GameState, PlayerPosition) error
-		Undo(*GameState, PlayerPosition) error
 		ToTransport() BoardbotsMove
 	}
 
@@ -60,10 +59,6 @@ func NewMove(m Mover, p PlayerPosition) *GameMove {
 func (m *GameMove) Move(state *GameState) error {
 	return m.Mover.Move(state, m.Player)
 }
-func (m *GameMove) Undo(state *GameState) error {
-	err := m.Mover.Undo(state, m.Player)
-	return err
-}
 
 func (m *AdvanceRobot) Move(game *GameState, player PlayerPosition) error {
 	robot, found := game.Robots[m.Robot]
@@ -88,24 +83,10 @@ func (m *AdvanceRobot) Move(game *GameState, player PlayerPosition) error {
 	m.Robot = robot.Position
 	game.MovesThisTurn -= 1
 
-	robot.IsBeamEnabled = !game.isCorridor(robot.Position)
-	return nil
-}
+	// // Evaluate state before turning on beam
+	game.resolveMove()
 
-func (m *AdvanceRobot) Undo(game *GameState, player PlayerPosition) error {
-	robot, found := game.Robots[m.Robot]
-	if !found {
-		json, _ := game.ToJson()
-		panic(fmt.Sprintf("Undoing %v, P%d, with gamestate %s", m, player, json))
-	}
-	delete(game.Robots, m.Robot)
-
-	robot.Position.Minus(robot.Direction)
-	game.Robots[robot.Position] = robot
-	m.Robot = robot.Position
-
-	robot.IsBeamEnabled = !game.isCorridor(robot.Position)
-
+	robot.IsBeamEnabled = !game.isCorridor(robot.Position) && !robot.IsLockedDown
 	return nil
 }
 
@@ -151,11 +132,6 @@ func (m *PlaceRobot) Move(game *GameState, player PlayerPosition) error {
 	return nil
 }
 
-func (m *PlaceRobot) Undo(game *GameState, player PlayerPosition) error {
-	delete(game.Robots, m.Robot)
-	return nil
-}
-
 func (m PlaceRobot) ToTransport() BoardbotsMove {
 	return BoardbotsMove{
 		Position: m.Robot,
@@ -176,16 +152,15 @@ func (m *TurnRobot) Move(game *GameState, player PlayerPosition) error {
 	if robot.Player != player {
 		return fmt.Errorf("cannot move %s, it belongs to Player %d", m.Robot.String(), robot.Player)
 	}
+	robot.IsBeamEnabled = false
+	game.activeBot = robot
 	robot.Direction.Rotate(m.Direction)
+	game.resolveMove()
+
+	robot.IsBeamEnabled = !robot.IsLockedDown
+	game.activeBot = nil
 
 	game.MovesThisTurn -= 1
-	return nil
-}
-
-func (m *TurnRobot) Undo(game *GameState, player PlayerPosition) error {
-	// Left and Right are zero and one, so 1 - <direction> will
-	// give the other direction. 1 - <0> = 1; 1 - <1> = 0
-	game.Robots[m.Robot].Direction.Rotate(1 - m.Direction)
 	return nil
 }
 

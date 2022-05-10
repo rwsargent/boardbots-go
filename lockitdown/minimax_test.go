@@ -15,7 +15,7 @@ func TestDepthOfOne(t *testing.T) {
 
 	root := MinimaxNode{
 		GameState: game,
-		GameMove:  nil,
+		GameMove:  GameMove{},
 		Searcher:  0,
 		Evaluator: ScoreGameState,
 	}
@@ -30,7 +30,7 @@ func TestDepthOfTwo(t *testing.T) {
 
 	root := MinimaxNode{
 		GameState: game,
-		GameMove:  nil,
+		GameMove:  GameMove{},
 		Searcher:  0,
 		Evaluator: ScoreGameState,
 	}
@@ -45,7 +45,7 @@ func TestDepthOf3(t *testing.T) {
 	originalJson, _ := game.ToJson()
 	root := MinimaxNode{
 		GameState: game,
-		GameMove:  nil,
+		GameMove:  GameMove{},
 		Searcher:  0,
 		Evaluator: ScoreGameState,
 	}
@@ -62,7 +62,7 @@ func BenchmarkMinimax3(b *testing.B) {
 	game := NewGame(TwoPlayerGameDef)
 	root := MinimaxNode{
 		GameState: game,
-		GameMove:  nil,
+		GameMove:  GameMove{},
 		Searcher:  0,
 		Evaluator: ScoreGameState,
 	}
@@ -77,7 +77,7 @@ func BenchmarkMinimaxWithIterator(b *testing.B) {
 	game := NewGame(TwoPlayerGameDef)
 	root := MinimaxNode{
 		GameState: game,
-		GameMove:  nil,
+		GameMove:  GameMove{},
 		Searcher:  0,
 		Evaluator: ScoreGameState,
 	}
@@ -91,7 +91,7 @@ func BenchmarkAlphaBetaVariousDepths(b *testing.B) {
 	game := NewGame(TwoPlayerGameDef)
 	root := MinimaxNode{
 		GameState: game,
-		GameMove:  nil,
+		GameMove:  GameMove{},
 		Searcher:  0,
 		Evaluator: ScoreGameState,
 	}

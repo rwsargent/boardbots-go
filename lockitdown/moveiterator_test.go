@@ -1,7 +1,9 @@
 package lockitdown
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -210,4 +212,110 @@ func TestIteratorFromState(t *testing.T) {
 		assert.NotNilf(t, m.Mover, "iter: %d\n", i)
 		i++
 	}
+}
+
+func TestWrongMoveFromState(t *testing.T) {
+	state := gameFromJson(`{
+		"gameDef": {
+		  "board": {
+			"HexaBoard": {
+			  "arenaRadius": 4
+			}
+		  },
+		  "maxRobotsInStaging": 2,
+		  "winCondition": "Elimination",
+		  "movesPerTurn": 3,
+		  "robotsPerPlayer": 6,
+		  "numPlayers": 2
+		},
+		"players": [
+		  {
+			"points": 0,
+			"placedRobots": 2
+		  },
+		  {
+			"points": 0,
+			"placedRobots": 2
+		  }
+		],
+		"robots": [
+		  [
+			{
+			  "q": -5,
+			  "r": 5
+			},
+			{
+			  "player": 1,
+			  "dir": {
+				"q": 1,
+				"r": -1
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": false
+			}
+		  ],
+		  [
+			{
+			  "q": 5,
+			  "r": -5
+			},
+			{
+			  "player": 2,
+			  "dir": {
+				"q": -1,
+				"r": 1
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": false
+			}
+		  ],
+		  [
+			{
+			  "q": 0,
+			  "r": 5
+			},
+			{
+			  "player": 2,
+			  "dir": {
+				"q": 0,
+				"r": -1
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": false
+			}
+		  ],
+		  [
+			{
+			  "q": 0,
+			  "r": -5
+			},
+			{
+			  "player": 1,
+			  "dir": {
+				"q": 0,
+				"r": 1
+			  },
+			  "isLocked": false,
+			  "isBeamEnabled": false
+			}
+		  ]
+		],
+		"playerTurn": 2,
+		"status": "OnGoing",
+		"movesThisTurn": 1,
+		"requiresTieBreak": false
+	  }`)
+
+	root := MinimaxNode{
+		GameState:    state,
+		GameMove:     GameMove{},
+		Searcher:     1,
+		Evaluator:    ScoreGameState,
+		MinimaxValue: 0,
+	}
+	move := AlphaBeta(context.Background(), &root, 11)
+
+	fmt.Printf("%+v\n", move)
+	err := state.Move(&move.GameMove)
+	assert.Nil(t, err)
 }

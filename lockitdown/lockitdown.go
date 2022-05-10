@@ -52,7 +52,7 @@ type (
 		MovesThisTurn    int
 		RequiresTieBreak bool
 		Winner           int
-		currentMove      *GameMove
+		activeBot        *Robot
 		saveStack        []SaveState
 	}
 
@@ -81,7 +81,8 @@ var (
 
 	moveBufferPool = sync.Pool{
 		New: func() any {
-			return make([]*GameMove, 0, 128)
+			s := make([]*GameMove, 0, 128)
+			return &s
 		},
 	}
 
@@ -158,7 +159,6 @@ func (p *Pair) Rotate(direction TurnDirection) {
 }
 
 func (game *GameState) Move(move *GameMove) error {
-	game.currentMove = move
 	if move.Player != PlayerPosition(game.PlayerTurn) {
 		return fmt.Errorf("wrong player, expected %d, was %d", game.PlayerTurn, move.Player)
 	}
@@ -188,21 +188,24 @@ func (game *GameState) Move(move *GameMove) error {
 }
 
 func (game *GameState) Undo(move *GameMove) error {
-	game.currentMove = move
-
-	err := move.Undo(game)
-	game.revertState()
-
-	if err != nil {
-		return err
+	save := game.saveStack[len(game.saveStack)-1]
+	for p := range game.Robots {
+		delete(game.Robots, p)
 	}
 
-	err = game.resolveMove()
-
-	if err != nil {
-		return err
+	for i, bot := range save.bots {
+		game.Robots[bot.Position] = &save.bots[i]
 	}
 
+	for i, player := range save.players {
+		game.Players[i].PlacedRobots = player.PlacedRobots
+		game.Players[i].Points = player.Points
+	}
+
+	game.PlayerTurn = save.player
+	game.MovesThisTurn = save.movesThisTurn
+
+	game.saveStack = game.saveStack[:len(game.saveStack)-1]
 	return nil
 }
 
@@ -226,23 +229,29 @@ func (game *GameState) resolveMove() error {
 
 func (game *GameState) updateLockedRobots(targeted map[Pair][]*Robot) bool {
 	resolved := true
-	// clear state on bots
 	for _, robot := range game.Robots {
-		robot.Enable()
-	}
-
-	for hex, attackers := range targeted {
-		if len(attackers) == 1 {
-			continue
-		}
-		if len(attackers) == 3 {
-			game.shutdownRobot(hex, attackers)
-			resolved = false
-		}
-		if len(attackers) == 2 {
-			if locked, ok := game.Robots[hex]; ok {
-				locked.Disable()
+		attackers, found := targeted[robot.Position]
+		if !found || len(attackers) == 1 {
+			if robot == game.activeBot {
+				// The active bots state is controlled by the move, until
+				// 'released'.
+				continue
 			}
+			beam := robot.IsBeamEnabled
+			lock := robot.IsLockedDown
+			// Enable bot
+			robot.IsLockedDown = false
+			robot.IsBeamEnabled = !game.isCorridor(robot.Position)
+
+			// State change, reevaluate
+			if beam != robot.IsBeamEnabled || lock != robot.IsLockedDown {
+				resolved = false
+			}
+		} else if len(attackers) == 3 {
+			game.shutdownRobot(robot.Position, attackers)
+			resolved = false
+		} else if len(attackers) == 2 {
+			robot.Disable()
 		}
 	}
 	return resolved
@@ -253,7 +262,9 @@ func (game *GameState) updateLockedRobots(targeted map[Pair][]*Robot) bool {
 func (game *GameState) checkForTieBreaks(targeted map[Pair][]*Robot) []*Robot {
 	tiebreaks := make([]*Robot, 0, 2)
 	for doomed, attackers := range targeted {
-		if len(attackers) > 1 {
+		// TODO(rwsargent) update targeted to be a *Robot -> *Robot map.
+		// Skip doomed robots that are already locked down.
+		if len(attackers) > 1 && !game.Robots[doomed].IsLockedDown {
 			for _, attacker := range attackers {
 				for doomedAttacker, doomedAttackerAttackers := range targeted {
 					if doomedAttacker == attacker.Position && len(doomedAttackerAttackers) > 1 {
@@ -291,7 +302,7 @@ func (game *GameState) taretedRobots() map[Pair][]*Robot {
 				if attackers, found := targeted[cursor]; found {
 					targeted[cursor] = append(attackers, attacker)
 				} else {
-					l := make([]*Robot, 0, 10)
+					l := make([]*Robot, 0)
 					targeted[cursor] = append(l, attacker)
 				}
 				break
@@ -309,13 +320,11 @@ func (game *GameState) isCorridor(pair Pair) bool {
 }
 
 func (game *GameState) shutdownRobot(hex Pair, attackers []*Robot) {
-	game.saveRobot(game.Robots[hex])
 	for _, attacker := range attackers {
 		game.Players[attacker.Player].Points += 1
 	}
 
 	delete(game.Robots, hex)
-
 }
 
 func (game *GameState) checkGameOver() (bool, int) {
@@ -392,39 +401,20 @@ func inBounds(size int, position Pair) bool {
 
 func (state *GameState) saveState() {
 	save := SaveState{
-		players:        []Player{},
-		shutdownRobots: []*Robot{},
-		movesThisTurn:  0,
-		player:         0,
+		players:       []Player{},
+		bots:          []Robot{},
+		movesThisTurn: 0,
+		player:        0,
 	}
 	for _, player := range state.Players {
 		save.players = append(save.players, *player)
 	}
+	for _, bots := range state.Robots {
+		save.bots = append(save.bots, *bots)
+	}
 	save.player = state.PlayerTurn
 	save.movesThisTurn = state.MovesThisTurn
 	state.saveStack = append(state.saveStack, save)
-}
-
-func (state *GameState) saveRobot(robot *Robot) {
-	save := &state.saveStack[len(state.saveStack)-1]
-	save.shutdownRobots = append(save.shutdownRobots, robot)
-}
-
-func (state *GameState) revertState() {
-	save := state.saveStack[len(state.saveStack)-1]
-	for _, bot := range save.shutdownRobots {
-		state.Robots[bot.Position] = bot
-	}
-
-	for i, player := range save.players {
-		state.Players[i].PlacedRobots = player.PlacedRobots
-		state.Players[i].Points = player.Points
-	}
-
-	state.PlayerTurn = save.player
-	state.MovesThisTurn = save.movesThisTurn
-
-	state.saveStack = state.saveStack[:len(state.saveStack)-1]
 }
 
 func intAbs(num int) int {

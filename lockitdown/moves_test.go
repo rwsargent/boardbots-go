@@ -286,7 +286,7 @@ func TestPlacedRobots(t *testing.T) {
 	game := NewGame(TwoPlayerGameDef)
 
 	m1 := NewMove(&PlaceRobot{
-		Hex:       Pair{0, 5},
+		Robot:     Pair{0, 5},
 		Direction: NW,
 	}, 0)
 
@@ -295,7 +295,7 @@ func TestPlacedRobots(t *testing.T) {
 	assert.Equal(t, 1, game.Players[0].PlacedRobots)
 
 	m2 := NewMove(&PlaceRobot{
-		Hex:       Pair{0, -5},
+		Robot:     Pair{0, -5},
 		Direction: SE,
 	}, 1)
 
@@ -304,7 +304,7 @@ func TestPlacedRobots(t *testing.T) {
 	assert.Equal(t, 1, game.Players[1].PlacedRobots)
 
 	m3 := NewMove(&PlaceRobot{
-		Hex:       Pair{-5, 5},
+		Robot:     Pair{-5, 5},
 		Direction: SW,
 	}, 0)
 
@@ -313,7 +313,7 @@ func TestPlacedRobots(t *testing.T) {
 	assert.Equal(t, 2, game.Players[0].PlacedRobots)
 
 	m4 := NewMove(&PlaceRobot{
-		Hex:       Pair{5, -5},
+		Robot:     Pair{5, -5},
 		Direction: NE,
 	}, 1)
 
