@@ -10,6 +10,7 @@ type (
 		moveIdx     int
 		edgeIndex   int
 		robotIndex  int
+		botCache    map[Pair]*Robot
 	}
 )
 
@@ -28,13 +29,19 @@ var (
 )
 
 func NewMoveIterator(game *GameState) *MoveIterator {
+	botCache := make(map[Pair]*Robot)
+	for i := 0; i < len(game.Robots); i++ {
+		robot := &game.Robots[i]
+		botCache[robot.Position] = &game.Robots[i]
+	}
 	it := &MoveIterator{
 		game:        game,
-		currentMove: movePool.Get().(*GameMove),
+		currentMove: new(GameMove),
 		moveBuf:     [3]GameMove{},
 		edgeIndex:   0,
 		moveIdx:     -1,
 		robotIndex:  0,
+		botCache:    botCache,
 	}
 	return it
 }
@@ -79,7 +86,7 @@ func (it *MoveIterator) findNext() {
 				}
 				advancePosition.Plus(bot.Direction)
 
-				if _, blocked := it.game.Robots[advancePosition]; !blocked &&
+				if _, blocked := it.botCache[advancePosition]; !blocked &&
 					inBounds(it.game.GameDef.Board.HexaBoard.ArenaRadius+1, advancePosition) {
 					advance := advancePool.Get().(*AdvanceRobot)
 					advance.Robot = bot.Position
@@ -112,7 +119,7 @@ func (it *MoveIterator) findNext() {
 		for it.edgeIndex < len(edges) {
 			edge := edges[it.edgeIndex]
 			it.edgeIndex++
-			if _, blocked := it.game.Robots[edge.position]; !blocked {
+			if _, blocked := it.botCache[edge.position]; !blocked {
 				place := placePool.Get().(*PlaceRobot)
 				place.Robot = edge.position
 				place.Direction = edge.direction
@@ -127,7 +134,7 @@ func (it *MoveIterator) findNext() {
 	return
 }
 
-func addTurn(gameMove *GameMove, direction TurnDirection, arenaRadius int, bot *Robot, g *GameState) {
+func addTurn(gameMove *GameMove, direction TurnDirection, arenaRadius int, bot Robot, g *GameState) {
 	turn := bot.Direction.Copy()
 	turn.Rotate(direction)
 

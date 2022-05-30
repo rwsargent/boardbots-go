@@ -6,6 +6,7 @@ package lockitdown
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"sync"
 )
 
@@ -47,7 +48,7 @@ type (
 	GameState struct {
 		GameDef          GameDef
 		Players          []*Player
-		Robots           map[Pair]*Robot
+		Robots           []Robot
 		PlayerTurn       PlayerPosition
 		MovesThisTurn    int
 		RequiresTieBreak bool
@@ -137,7 +138,7 @@ func NewGame(gameDef GameDef) *GameState {
 	return &GameState{
 		GameDef:          gameDef,
 		Players:          players,
-		Robots:           make(map[Pair]*Robot),
+		Robots:           make([]Robot, 0),
 		PlayerTurn:       0,
 		MovesThisTurn:    gameDef.MovesPerTurn,
 		RequiresTieBreak: false,
@@ -189,13 +190,8 @@ func (game *GameState) Move(move *GameMove) error {
 
 func (game *GameState) Undo(move *GameMove) error {
 	save := game.saveStack[len(game.saveStack)-1]
-	for p := range game.Robots {
-		delete(game.Robots, p)
-	}
 
-	for i, bot := range save.bots {
-		game.Robots[bot.Position] = &save.bots[i]
-	}
+	game.Robots = save.bots
 
 	for i, player := range save.players {
 		game.Players[i].PlacedRobots = player.PlacedRobots
@@ -206,6 +202,16 @@ func (game *GameState) Undo(move *GameMove) error {
 	game.MovesThisTurn = save.movesThisTurn
 
 	game.saveStack = game.saveStack[:len(game.saveStack)-1]
+	return nil
+}
+
+func (game *GameState) RobotAt(hex Pair) *Robot {
+	for i := 0; i < len(game.Robots); i++ {
+		robot := &game.Robots[i]
+		if robot.Position == hex {
+			return robot
+		}
+	}
 	return nil
 }
 
@@ -227,10 +233,12 @@ func (game *GameState) resolveMove() error {
 	return nil
 }
 
-func (game *GameState) updateLockedRobots(targeted map[Pair][]*Robot) bool {
+func (game *GameState) updateLockedRobots(targeted map[*Robot][]*Robot) bool {
 	resolved := true
-	for _, robot := range game.Robots {
-		attackers, found := targeted[robot.Position]
+	doomed := []int{}
+	for i, _ := range game.Robots {
+		robot := &game.Robots[i]
+		attackers, found := targeted[robot]
 		if !found || len(attackers) == 1 {
 			if robot == game.activeBot {
 				// The active bots state is controlled by the move, until
@@ -248,27 +256,31 @@ func (game *GameState) updateLockedRobots(targeted map[Pair][]*Robot) bool {
 				resolved = false
 			}
 		} else if len(attackers) == 3 {
-			game.shutdownRobot(robot.Position, attackers)
+			doomed = append(doomed, i)
+			game.shutdownRobot(i, attackers)
 			resolved = false
 		} else if len(attackers) == 2 {
 			robot.Disable()
 		}
+	}
+	for _, doomedIdx := range doomed {
+		game.Robots = append(game.Robots[:doomedIdx], game.Robots[doomedIdx+1:]...)
 	}
 	return resolved
 }
 
 // If any "doomed" robots (locked or shutdown) are also part of a lock or shut down,
 // we need to break a tie.
-func (game *GameState) checkForTieBreaks(targeted map[Pair][]*Robot) []*Robot {
+func (game *GameState) checkForTieBreaks(targeted map[*Robot][]*Robot) []*Robot {
 	tiebreaks := make([]*Robot, 0, 2)
 	for doomed, attackers := range targeted {
 		// TODO(rwsargent) update targeted to be a *Robot -> *Robot map.
 		// Skip doomed robots that are already locked down.
-		if len(attackers) > 1 && !game.Robots[doomed].IsLockedDown {
+		if len(attackers) > 1 && !doomed.IsLockedDown {
 			for _, attacker := range attackers {
 				for doomedAttacker, doomedAttackerAttackers := range targeted {
-					if doomedAttacker == attacker.Position && len(doomedAttackerAttackers) > 1 {
-						tiebreaks = append(tiebreaks, game.Robots[doomed])
+					if doomedAttacker.Position == attacker.Position && len(doomedAttackerAttackers) > 1 {
+						tiebreaks = append(tiebreaks, doomed)
 					}
 				}
 			}
@@ -279,36 +291,68 @@ func (game *GameState) checkForTieBreaks(targeted map[Pair][]*Robot) []*Robot {
 
 // Returns a map of locations of robots and which robots are pointing
 // at them.
-func (game *GameState) taretedRobots() map[Pair][]*Robot {
-	targeted := make(map[Pair][]*Robot)
-	for _, attacker := range game.Robots {
+func (game *GameState) taretedRobots() map[*Robot][]*Robot {
+	targeted := make(map[*Robot][]*Robot)
+	for a := 0; a < len(game.Robots); a++ {
+		attacker := &game.Robots[a]
 		if !attacker.IsBeamEnabled || attacker.IsLockedDown || game.isCorridor(attacker.Position) {
 			continue
 		}
-
-		// add hexes to contended
-		cursor := Pair{
-			Q: attacker.Position.Q,
-			R: attacker.Position.R,
+		var closest *Robot
+		var dist int = math.MaxInt
+		for t := 0; t < len(game.Robots); t++ {
+			target := &game.Robots[t]
+			if target == attacker {
+				continue
+			}
+			if attackAxes[attacker.Direction](attacker.Position, target.Position) {
+				d := Pair{
+					Q: attacker.Position.Q - target.Position.Q,
+					R: attacker.Position.R - target.Position.R,
+				}.Dist()
+				if d < dist {
+					closest = target
+					dist = d
+				}
+			}
 		}
-		cursor.Plus(attacker.Direction)
-
-		for ; !game.isCorridor(cursor); cursor.Plus(attacker.Direction) {
-			if targetedBot, hit := game.Robots[cursor]; hit {
-				if targetedBot.Player == attacker.Player {
-					break
-				}
-				// Add to attackers list
-				if attackers, found := targeted[cursor]; found {
-					targeted[cursor] = append(attackers, attacker)
-				} else {
-					l := make([]*Robot, 0)
-					targeted[cursor] = append(l, attacker)
-				}
-				break
+		if closest != nil && closest.Player != attacker.Player {
+			if attackers, found := targeted[closest]; found {
+				targeted[closest] = append(attackers, attacker)
+			} else {
+				l := make([]*Robot, 0)
+				targeted[closest] = append(l, attacker)
 			}
 		}
 	}
+	// for _, attacker := range game.Robots {
+	// 	if !attacker.IsBeamEnabled || attacker.IsLockedDown || game.isCorridor(attacker.Position) {
+	// 		continue
+	// 	}
+
+	// 	// add hexes to contended
+	// 	cursor := Pair{
+	// 		Q: attacker.Position.Q,
+	// 		R: attacker.Position.R,
+	// 	}
+	// 	cursor.Plus(attacker.Direction)
+
+	// 	for ; !game.isCorridor(cursor); cursor.Plus(attacker.Direction) {
+	// 		if targetedBot, hit := game.Robots[cursor]; hit {
+	// 			if targetedBot.Player == attacker.Player {
+	// 				break
+	// 			}
+	// 			// Add to attackers list
+	// 			if attackers, found := targeted[cursor]; found {
+	// 				targeted[cursor] = append(attackers, attacker)
+	// 			} else {
+	// 				l := make([]*Robot, 0)
+	// 				targeted[cursor] = append(l, attacker)
+	// 			}
+	// 			break
+	// 		}
+	// 	}
+	// }
 
 	return targeted
 }
@@ -319,12 +363,10 @@ func (game *GameState) isCorridor(pair Pair) bool {
 	return pair.Dist() == corridor
 }
 
-func (game *GameState) shutdownRobot(hex Pair, attackers []*Robot) {
+func (game *GameState) shutdownRobot(robotIdx int, attackers []*Robot) {
 	for _, attacker := range attackers {
 		game.Players[attacker.Player].Points += 1
 	}
-
-	delete(game.Robots, hex)
 }
 
 func (game *GameState) checkGameOver() (bool, int) {
@@ -364,23 +406,13 @@ func (g *GameState) ToJson() (string, error) {
 }
 
 // as an optimization, PossibleMoves takes a buffer to avoid allocating every call.
-func (g *GameState) PossibleMoves(buf []*GameMove) []*GameMove {
-	moves := buf
-	if g.MovesThisTurn == 3 && g.playerBotsInCorridor() < 2 {
-		edges := edges(g.GameDef.Board.HexaBoard.ArenaRadius + 1)
-		for _, edge := range edges {
-			if _, found := g.Robots[edge.position]; !found {
-				m := movePool.Get().(*GameMove)
-				m.Mover = &PlaceRobot{
-					Robot:     edge.position,
-					Direction: edge.direction,
-				}
-				m.Player = g.PlayerTurn
-				moves = append(moves, m)
-			}
-		}
+func (g *GameState) PossibleMoves(buf []GameMove) []GameMove {
+	it := NewMoveIterator(g)
+	for it.Next() {
+		m := it.Get()
+		buf = append(buf, *m)
 	}
-	return moves
+	return buf
 }
 
 func (g *GameState) playerBotsInCorridor() int {
@@ -402,16 +434,14 @@ func inBounds(size int, position Pair) bool {
 func (state *GameState) saveState() {
 	save := SaveState{
 		players:       []Player{},
-		bots:          []Robot{},
+		bots:          make([]Robot, len(state.Robots)),
 		movesThisTurn: 0,
 		player:        0,
 	}
 	for _, player := range state.Players {
 		save.players = append(save.players, *player)
 	}
-	for _, bots := range state.Robots {
-		save.bots = append(save.bots, *bots)
-	}
+	copy(save.bots, state.Robots)
 	save.player = state.PlayerTurn
 	save.movesThisTurn = state.MovesThisTurn
 	state.saveStack = append(state.saveStack, save)

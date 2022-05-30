@@ -13,29 +13,29 @@ func TestIteratorThirdPly(t *testing.T) {
 
 	gameState := NewGame(TwoPlayerGameDef)
 
-	gameState.Robots = map[Pair]*Robot{
-		{-5, 0}: {
+	gameState.Robots = []Robot{
+		{
 			Position:      Pair{-5, 0},
 			Direction:     E,
 			IsBeamEnabled: false,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{5, 0}: {
+		{
 			Position:      Pair{5, 0},
 			Direction:     W,
 			IsBeamEnabled: false,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{-5, 5}: {
+		{
 			Position:      Pair{-5, 5},
 			Direction:     NE,
 			IsBeamEnabled: false,
 			IsLockedDown:  false,
 			Player:        1,
 		},
-		{5, -5}: {
+		{
 			Position:      Pair{5, -5},
 			Direction:     SW,
 			IsBeamEnabled: false,
@@ -76,15 +76,15 @@ func TestFullMoveIterator(t *testing.T) {
 	game := NewGame(TwoPlayerGameDef)
 	it := NewMoveIterator(game)
 
-	game.Robots = map[Pair]*Robot{
-		{-4, 0}: {
+	game.Robots = []Robot{
+		{
 			Position:      Pair{-4, 0},
 			Direction:     E,
 			IsBeamEnabled: false,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{4, 0}: {
+		{
 			Position:      Pair{4, 0},
 			Direction:     W,
 			IsBeamEnabled: false,
@@ -313,7 +313,7 @@ func TestWrongMoveFromState(t *testing.T) {
 		Evaluator:    ScoreGameState,
 		MinimaxValue: 0,
 	}
-	move := AlphaBeta(context.Background(), &root, 11)
+	move := AlphaBeta(context.Background(), &root, 9)
 
 	fmt.Printf("%+v\n", move)
 	err := state.Move(&move.GameMove)

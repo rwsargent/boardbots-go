@@ -61,8 +61,8 @@ func (m *GameMove) Move(state *GameState) error {
 }
 
 func (m *AdvanceRobot) Move(game *GameState, player PlayerPosition) error {
-	robot, found := game.Robots[m.Robot]
-	if !found {
+	robot := game.RobotAt(m.Robot)
+	if robot == nil {
 		return fmt.Errorf("no robot at location %v", m.Robot)
 	}
 	if robot.IsLockedDown {
@@ -71,16 +71,14 @@ func (m *AdvanceRobot) Move(game *GameState, player PlayerPosition) error {
 	if robot.Player != player {
 		return fmt.Errorf("cannot move %s, it belongs to Player %d", m.Robot.String(), robot.Player)
 	}
-	robot.Position.Plus(robot.Direction)
-	if _, ok := game.Robots[robot.Position]; ok {
+	advanceSpot := robot.Position.Copy()
+	advanceSpot.Plus(robot.Direction)
+	if block := game.RobotAt(advanceSpot); block != nil {
 		// Undo move
-		robot.Position.Minus((robot.Direction))
 		return errors.New("cannot advance, another bot in the way")
 	}
-	delete(game.Robots, m.Robot)
-	game.Robots[robot.Position] = robot
+	robot.Position.Plus(robot.Direction)
 
-	m.Robot = robot.Position
 	game.MovesThisTurn -= 1
 
 	// // Evaluate state before turning on beam
@@ -96,6 +94,10 @@ func (m AdvanceRobot) ToTransport() BoardbotsMove {
 		Action:   "Advance",
 	}
 
+}
+
+func (m AdvanceRobot) String() string {
+	return fmt.Sprintf("Move %s", m.Robot.String())
 }
 
 func (m *PlaceRobot) Move(game *GameState, player PlayerPosition) error {
@@ -118,18 +120,22 @@ func (m *PlaceRobot) Move(game *GameState, player PlayerPosition) error {
 		return errors.New("can only have two robots in the corridor at a time")
 	}
 
-	game.Robots[m.Robot] = &Robot{
+	game.Robots = append(game.Robots, Robot{
 		Position:      m.Robot,
 		Direction:     m.Direction,
 		IsBeamEnabled: true,
 		IsLockedDown:  false,
 		Player:        player,
-	}
+	})
 
 	game.MovesThisTurn = 0
 	game.Players[player].PlacedRobots += 1
 
 	return nil
+}
+
+func (m PlaceRobot) String() string {
+	return fmt.Sprintf("Place %s: dir: %s", m.Robot.String(), m.Direction.String())
 }
 
 func (m PlaceRobot) ToTransport() BoardbotsMove {
@@ -145,8 +151,7 @@ func (m PlaceRobot) ToTransport() BoardbotsMove {
 
 func (m *TurnRobot) Move(game *GameState, player PlayerPosition) error {
 	var robot *Robot
-	var found bool
-	if robot, found = game.Robots[m.Robot]; !found {
+	if robot = game.RobotAt(m.Robot); robot == nil {
 		return fmt.Errorf("cannot find robot %v", m.Robot)
 	}
 	if robot.Player != player {
@@ -180,4 +185,14 @@ func (m TurnRobot) ToTransport() BoardbotsMove {
 			},
 		},
 	}
+}
+
+func (m TurnRobot) String() string {
+	var turn string
+	if m.Direction == Left {
+		turn = "Left"
+	} else {
+		turn = "Right"
+	}
+	return fmt.Sprintf("Turn %s %s", m.Robot.String(), turn)
 }

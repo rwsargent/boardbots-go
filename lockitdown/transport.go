@@ -32,9 +32,9 @@ func ConvertToTransport(game *GameState) *TransportState {
 
 	robots := make([]TransportRobots, len(game.Robots))
 	idx := 0
-	for pos, robot := range game.Robots {
+	for _, robot := range game.Robots {
 		robots[idx] = []interface{}{
-			pos,
+			robot.Position,
 			TransportRobot{
 				Player:        int(robot.Player) + 1,
 				Dir:           robot.Direction,
@@ -72,11 +72,11 @@ func StateFromTransport(tState *TransportState) *GameState {
 		})
 	}
 
-	robots := make(map[Pair]*Robot, len(tState.Robots))
-	for _, robot := range tState.Robots {
+	robots := make([]Robot, len(tState.Robots))
+	for i, robot := range tState.Robots {
 		tRobot := TransportRobotFromMap(robot[1].(map[string]interface{}))
 		position := PairFromMap(robot[0].(map[string]interface{}))
-		robots[position] = &Robot{
+		robots[i] = Robot{
 			Position:      position,
 			Direction:     tRobot.Dir,
 			IsBeamEnabled: tRobot.IsBeamEnabled,

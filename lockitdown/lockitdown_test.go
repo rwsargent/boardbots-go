@@ -155,43 +155,43 @@ func TestGameOver(t *testing.T) {
 				PlacedRobots: 3,
 			},
 		},
-		Robots: map[Pair]*Robot{
-			{-4, 4}: {
+		Robots: []Robot{
+			{
 				Position:      Pair{-4, 4},
 				Direction:     NE,
 				IsBeamEnabled: true,
 				IsLockedDown:  false,
 				Player:        1,
 			},
-			{4, 0}: {
+			{
 				Position:      Pair{4, 0},
 				Direction:     SW,
 				IsBeamEnabled: true,
 				IsLockedDown:  false,
 				Player:        1,
 			},
-			{0, -4}: {
+			{
 				Position:      Pair{0, -4},
 				Direction:     SE,
 				IsBeamEnabled: true,
 				IsLockedDown:  false,
 				Player:        1,
 			},
-			{4, -4}: {
+			{
 				Position:      Pair{4, -4},
 				Direction:     SW,
 				IsBeamEnabled: true,
 				IsLockedDown:  false,
 				Player:        0,
 			},
-			{5, -5}: {
+			{
 				Position:      Pair{5, -5},
 				Direction:     SW,
 				IsBeamEnabled: true,
 				IsLockedDown:  false,
 				Player:        0,
 			},
-			{0, 5}: {
+			{
 				Position:      Pair{0, 5},
 				Direction:     NW,
 				IsBeamEnabled: true,
@@ -327,14 +327,14 @@ func TestPossibleMoves(t *testing.T) {
 		assert.Nil(t, err)
 	}
 
-	possibleMoves := game.PossibleMoves([]*GameMove{})
+	possibleMoves := game.PossibleMoves([]GameMove{})
 
 	for _, possibleMove := range possibleMoves {
 		player := game.PlayerTurn
 		assert.Equal(t, PlayerPosition(1), player)
-		err := game.Move(possibleMove)
+		err := game.Move(&possibleMove)
 		assert.Nil(t, err)
-		game.Undo(possibleMove)
+		game.Undo(&possibleMove)
 	}
 
 	game.Undo(initMoves[6])
@@ -347,8 +347,8 @@ func TestPossibleMoves(t *testing.T) {
 
 	assert.Equal(t, PlayerPosition(1), game.PlayerTurn)
 
-	nextMoves := game.PossibleMoves([]*GameMove{})
-	next := nextMoves[rand.Intn(len(nextMoves))]
+	nextMoves := game.PossibleMoves(make([]GameMove, 0, 128))
+	next := &nextMoves[rand.Intn(len(nextMoves))]
 
 	err := game.Move(next)
 	assert.Nil(t, err)
@@ -364,15 +364,15 @@ func TestFakeMinimaxStressTest(t *testing.T) {
 		if depth == 0 {
 			return
 		}
-		moves := game.PossibleMoves([]*GameMove{})
+		moves := game.PossibleMoves([]GameMove{})
 		for _, move := range moves {
 			tState := ConvertToTransport(game)
-			err := game.Move(move)
+			err := game.Move(&move)
 			assert.Nil(t, err)
 
 			recur(game, depth-1)
 
-			err = game.Undo(move)
+			err = game.Undo(&move)
 			undoneTState := ConvertToTransport(game)
 			assert.Nil(t, err)
 
@@ -467,7 +467,7 @@ func TestPossibleMovesFromState(t *testing.T) {
 	json.Unmarshal([]byte(jsonState), &tState)
 	state := StateFromTransport(&tState)
 
-	moves := state.PossibleMoves([]*GameMove{})
+	moves := state.PossibleMoves([]GameMove{})
 	fmt.Printf("%v\n", moves)
 }
 
@@ -475,43 +475,41 @@ func BenchmarkPossibleMoves(b *testing.B) {
 	b.StopTimer()
 	game := NewGame(TwoPlayerGameDef)
 
-	game.Robots = map[Pair]*Robot{
-		{0, -4}: {
+	game.Robots = []Robot{
+		{
 			Position:      Pair{0, -4},
 			Direction:     SE,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{4, -4}: {
+		{
 			Position:      Pair{4, -4},
 			Direction:     SW,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{4, 0}: {
+		{
 			Position:      Pair{4, 0},
 			Direction:     W,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{0, 4}: {
+		{
 			Position:      Pair{0, 4},
 			Direction:     NW,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        1,
-		},
-		{-4, 4}: {
+		}, {
 			Position:      Pair{-4, 4},
 			Direction:     NE,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        1,
-		},
-		{-4, 0}: {
+		}, {
 			Position:      Pair{-4, 0},
 			Direction:     E,
 			IsBeamEnabled: true,
@@ -521,7 +519,7 @@ func BenchmarkPossibleMoves(b *testing.B) {
 	}
 	b.StartTimer()
 	for i := 0; i < b.N; i++ {
-		game.PossibleMoves([]*GameMove{})
+		game.PossibleMoves([]GameMove{})
 	}
 }
 
@@ -713,29 +711,29 @@ func TestFromState(t *testing.T) {
 
 func TestEnterNoTieBreak(t *testing.T) {
 	game := NewGame(TwoPlayerGameDef)
-	game.Robots = map[Pair]*Robot{
-		{-4, 4}: {
+	game.Robots = []Robot{
+		{
 			Position:      Pair{-4, 4},
 			Direction:     NE,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{0, -4}: {
+		{
 			Position:      Pair{0, -4},
 			Direction:     E,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{-4, 0}: {
+		{
 			Position:      Pair{-4, 0},
 			Direction:     SE,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        1,
 		},
-		{5, -5}: {
+		{
 			Position:      Pair{5, -5},
 			Direction:     SW,
 			IsBeamEnabled: false,
@@ -757,36 +755,36 @@ func TestEnterNoTieBreak(t *testing.T) {
 
 func TestTurnLocksDownBot(t *testing.T) {
 	game := NewGame(TwoPlayerGameDef)
-	game.Robots = map[Pair]*Robot{
-		{-4, 4}: {
+	game.Robots = []Robot{
+		{
 			Position:      Pair{-4, 4},
 			Direction:     NE,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{0, -4}: {
+		{
 			Position:      Pair{0, -4},
 			Direction:     E,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        0,
 		},
-		{-4, 0}: {
+		{
 			Position:      Pair{-4, 0},
 			Direction:     SE,
 			IsBeamEnabled: true,
 			IsLockedDown:  false,
 			Player:        1,
 		},
-		{4, -4}: {
+		{
 			Position:      Pair{4, -4},
 			Direction:     SW,
 			IsBeamEnabled: false,
 			IsLockedDown:  true,
 			Player:        1,
 		},
-		{4, 0}: {
+		{
 			Position:      Pair{4, 0},
 			Direction:     W,
 			IsBeamEnabled: true,
@@ -803,8 +801,45 @@ func TestTurnLocksDownBot(t *testing.T) {
 	err := game.Move(&GameMove{0, &move})
 	assert.Nil(t, err)
 
-	assert.True(t, game.Robots[Pair{-4, 4}].IsLockedDown)
-	assert.False(t, game.Robots[Pair{4, -4}].IsLockedDown)
+	assert.True(t, game.RobotAt(Pair{-4, 4}).IsLockedDown)
+	assert.False(t, game.RobotAt(Pair{4, -4}).IsLockedDown)
+}
+
+func TestTargeted(t *testing.T) {
+	game := NewGame(TwoPlayerGameDef)
+	game.Robots = []Robot{
+		{
+			Position:      Pair{0, 0},
+			Direction:     SW,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        0,
+		},
+		{
+			Position:      Pair{-4, 4},
+			Direction:     NE,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        1,
+		},
+		{
+			Position:      Pair{4, -4},
+			Direction:     SW,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        1,
+		},
+		{
+			Position:      Pair{0, -4},
+			Direction:     SE,
+			IsBeamEnabled: true,
+			IsLockedDown:  false,
+			Player:        0,
+		},
+	}
+	targeted := game.taretedRobots()
+	assert.Len(t, targeted, 3)
+
 }
 
 func TestMoveIntoPotentialTieBreak(t *testing.T) {

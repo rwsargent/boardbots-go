@@ -35,12 +35,12 @@ func (n *MinimaxNode) Children(nodeBuffer []minimax.Node) []minimax.Node {
 	moveBuffer := moveBufferPool.Get().(*[]*GameMove)
 	defer moveBufferPool.Put(moveBuffer)
 
-	nextMoves := n.GameState.PossibleMoves((*moveBuffer)[:0])
+	nextMoves := n.GameState.PossibleMoves([]GameMove{})
 
 	for _, nextMove := range nextMoves {
 		node := nodePool.Get().(*MinimaxNode)
 		node.GameState = n.GameState
-		node.GameMove = *nextMove
+		node.GameMove = nextMove
 		node.Searcher = n.Searcher
 		node.Evaluator = n.Evaluator
 		nodeBuffer = append(nodeBuffer, node)
@@ -55,7 +55,8 @@ func (n *MinimaxNode) ShouldMaximize() bool {
 func (n *MinimaxNode) Move() {
 	err := n.GameState.Move(&n.GameMove)
 	if err != nil {
-		panic(err)
+		json, _ := n.GameState.ToJson()
+		panic(fmt.Errorf("%s.\n\n%s", err, json))
 	}
 }
 
@@ -72,7 +73,7 @@ func (n *MinimaxNode) SetScore(score int) {
 }
 
 func (n *MinimaxNode) Release() {
-	movePool.Put(n.GameMove)
+	movePool.Put(&n.GameMove)
 	nodePool.Put(n)
 }
 
@@ -111,10 +112,6 @@ func MinimaxWithIterator(node *MinimaxNode, depth int) MinimaxNode {
 		if comparator(childsBest.Score(), best.Score()) {
 			best = child
 			best.SetScore(childsBest.Score())
-
-			// Copy the move, so the iterator doesn't blow it out.
-			// bestMove = *child.GameMove
-			// best.GameMove = &bestMove
 		}
 		child.Undo()
 
@@ -148,7 +145,6 @@ func alphaBeta(ctx context.Context, node *MinimaxNode, depth, alpha, beta int) M
 		Evaluator: node.Evaluator,
 		Searcher:  node.Searcher,
 	}
-	// var bestMove *GameMove = new(GameMove)
 
 	if node.ShouldMaximize() {
 		best.SetScore(math.MinInt)
@@ -156,7 +152,8 @@ func alphaBeta(ctx context.Context, node *MinimaxNode, depth, alpha, beta int) M
 			child.GameMove = *it.Get()
 
 			if child.GameMove.Mover == nil {
-				panic(fmt.Sprintf("depth: %d, parent: %+v", depth, node))
+				state, _ := child.GameState.ToJson()
+				panic(fmt.Sprintf("depth: %d, parent: %+v\nstate: %s", depth, node, state))
 			}
 
 			child.Move()
@@ -166,9 +163,6 @@ func alphaBeta(ctx context.Context, node *MinimaxNode, depth, alpha, beta int) M
 			if childsBest.Score() > best.Score() {
 				best = child
 				best.SetScore(childsBest.Score())
-				// Copy the move, so the iterator doesn't blow it out.
-				// *bestMove = *child.GameMove
-				// best.GameMove = bestMove
 			}
 			if childsBest.Score() >= beta {
 				break
@@ -195,9 +189,6 @@ func alphaBeta(ctx context.Context, node *MinimaxNode, depth, alpha, beta int) M
 			if childsBest.Score() < best.Score() {
 				best = child
 				best.SetScore(childsBest.Score())
-				// Copy the move, so the iterator doesn't blow it out.
-				// *bestMove = *child.GameMove
-				// best.GameMove = bestMove
 			}
 			if childsBest.Score() <= alpha {
 				break

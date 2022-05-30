@@ -25,7 +25,7 @@ func ScoreGameState(game *GameState, player PlayerPosition) int {
 	score := 0
 
 	for _, robot := range game.Robots {
-		botScore := scoreRobot(robot, game)
+		botScore := scoreRobot(&robot, game)
 		if robot.Player == player {
 			score += botScore
 		} else {
